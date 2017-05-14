@@ -69,7 +69,7 @@ int readSettings() {
 }
 
 int initData() {
-    if (!config_getPeerList(&peer_list, &sock_fd_tf, db_public_path)) {
+    if (!config_getPeerList(&peer_list, &sock_fd_tf,sock_buf_size, db_public_path)) {
         FREE_LIST(&peer_list);
         return 0;
     }
@@ -102,6 +102,7 @@ void initApp() {
     if (!readSettings()) {
         exit_nicely_e("initApp: failed to read settings\n");
     }
+        peer_client.sock_buf_size = sock_buf_size;
     if (!initPid(&pid_file, &proc_id, pid_path)) {
         exit_nicely_e("initApp: failed to initialize pid\n");
     }
@@ -133,7 +134,6 @@ void serverRun(int *state, int init_state) {
     char buf_in[sock_buf_size];
     char buf_out[sock_buf_size];
     uint8_t crc;
-    int i, j;
     crc = 0;
     memset(buf_in, 0, sizeof buf_in);
     acp_initBuf(buf_out, sizeof buf_out);
@@ -141,9 +141,9 @@ void serverRun(int *state, int init_state) {
         return;
     }
 #ifdef MODE_DEBUG
-    dumpBuf(buf_in, sizeof buf_in);
+    acp_dumpBuf(buf_in, sizeof buf_in);
 #endif    
-    if (!crc_check(buf_in, sizeof buf_in)) {
+    if (!acp_crc_check(buf_in, sizeof buf_in)) {
 #ifdef MODE_DEBUG
         fputs("WARNING: serverRun: crc check failed\n", stderr);
 #endif
@@ -231,7 +231,7 @@ void serverRun(int *state, int init_state) {
             return;
 
     }
-
+    int i, j;
     switch (buf_in[1]) {
         case ACP_CMD_STOP:
             switch (buf_in[0]) {
@@ -365,7 +365,7 @@ void serverRun(int *state, int init_state) {
     }
     return;
 }
-#define INTERVAL_CHECK if (!ton_ts(item->check_interval, &item->tmr_check)){return;}acp_pingPeer(&item->peer, sock_buf_size);
+#define INTERVAL_CHECK if (!ton_ts(item->check_interval, &item->tmr_check)){return;}acp_pingPeer(&item->peer);
 
 void progControl(Prog *item) {
 

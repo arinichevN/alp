@@ -78,6 +78,7 @@ int addProg(Prog *item, ProgList *list) {
 
 int loadProg_callback(void *d, int argc, char **argv, char **azColName) {
     extern int sock_fd_tf;
+    extern size_t sock_buf_size;
     extern char db_public_path[LINE_SIZE];
     ProgData *data = (ProgData *) d;
     Prog *item = (Prog *) malloc(sizeof *(item));
@@ -96,7 +97,7 @@ int loadProg_callback(void *d, int argc, char **argv, char **azColName) {
                 free(item);
                 return 1;
             }
-            if (!config_getPeer(&item->peer, argv[i], &sock_fd_tf, db)) {
+            if (!config_getPeer(&item->peer, argv[i], &sock_fd_tf,sock_buf_size, db)) {
                 sqlite3_close(db);
                 free(item);
                 return 1;
@@ -268,7 +269,7 @@ int callHuman(Prog *item, char *message, Peer *peer, const char *db_path) {
     size_t i;
     for (i = 0; i < pn_list.length; i++) {
         if (item->sms) {
-            acp_sendSMS(peer, &pn_list.item[LINE_SIZE * i], message, sock_buf_size);
+            acp_sendSMS(peer, &pn_list.item[LINE_SIZE * i], message);
         }
         break;
     }

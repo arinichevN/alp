@@ -133,8 +133,6 @@ void initApp() {
 void serverRun(int *state, int init_state) {
     char buf_in[sock_buf_size];
     char buf_out[sock_buf_size];
-    uint8_t crc;
-    crc = 0;
     memset(buf_in, 0, sizeof buf_in);
     acp_initBuf(buf_out, sizeof buf_out);
     if (!serverRead((void *) buf_in, sizeof buf_in, sock_fd, (struct sockaddr*) (&(peer_client.addr)), &(peer_client.addr_size))) {

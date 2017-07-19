@@ -45,7 +45,7 @@ int readSettings() {
 #endif
         return 0;
     }
-char s[LINE_SIZE];
+    char s[LINE_SIZE];
     fgets(s, LINE_SIZE, stream);
     int n;
     n = fscanf(stream, "%d\t%255s\t%d\t%ld\t%ld\t%u\t%32s\t%255s\t%255s\t%255s\n",

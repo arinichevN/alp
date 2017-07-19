@@ -136,7 +136,7 @@ int bufCatProgInit(const Prog *item, char *buf, size_t buf_size) {
             item->id,
             item->check_interval.tv_sec,
             item->cope_duration.tv_sec,
-            item->cell_peer.id,
+            item->call_peer.id,
             item->phone_number_group_id
             );
     if (bufCat(buf, q, buf_size) == NULL) {
@@ -186,7 +186,7 @@ void printAll() {
     sendStr(q, &crc);
     snprintf(q, sizeof q, "log_limit: %d\n", log_limit);
     sendStr(q, &crc);
-    snprintf(q, sizeof q, "cell_peer_id: %s\n", cell_peer_id);
+    snprintf(q, sizeof q, "call_peer_id: %s\n", call_peer_id);
     sendStr(q, &crc);
     snprintf(q, sizeof q, "db_data_path: %s\n", db_data_path);
     sendStr(q, &crc);

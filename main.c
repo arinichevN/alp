@@ -12,8 +12,8 @@ char db_data_path[LINE_SIZE];
 char db_log_path[LINE_SIZE];
 char db_public_path[LINE_SIZE];
 
-char cell_peer_id[NAME_SIZE];
-Peer *cell_peer = NULL;
+char call_peer_id[NAME_SIZE];
+Peer *call_peer = NULL;
 
 int pid_file = -1;
 int proc_id;
@@ -22,7 +22,7 @@ size_t sock_buf_size = 0;
 int sock_fd = -1;
 int sock_fd_tf = -1;
 
-int log_limit = 0;
+unsigned int log_limit = 0;
 Peer peer_client = {.fd = &sock_fd, .addr_size = sizeof peer_client.addr};
 struct timespec cycle_duration = {0, 0};
 pthread_t thread;
@@ -45,16 +45,17 @@ int readSettings() {
 #endif
         return 0;
     }
-
+char s[LINE_SIZE];
+    fgets(s, LINE_SIZE, stream);
     int n;
-    n = fscanf(stream, "%d\t%255s\t%d\t%ld\t%ld\t%d\t%32s\t%255s\t%255s\t%255s\n",
+    n = fscanf(stream, "%d\t%255s\t%d\t%ld\t%ld\t%u\t%32s\t%255s\t%255s\t%255s\n",
             &sock_port,
             pid_path,
             &sock_buf_size,
             &cycle_duration.tv_sec,
             &cycle_duration.tv_nsec,
             &log_limit,
-            cell_peer_id,
+            call_peer_id,
             db_data_path,
             db_public_path,
             db_log_path
@@ -62,19 +63,25 @@ int readSettings() {
             );
     if (n != 10) {
         fclose(stream);
+#ifdef MODE_DEBUG
+        fputs("ERROR: readSettings: bad row format\n", stderr);
+#endif
         return 0;
     }
     fclose(stream);
+#ifdef MODE_DEBUG
+    printf("readSettings: \n\tsock_port: %d, \n\tpid_path: %s, \n\tsock_buf_size: %d, \n\tcycle_duration: %ld sec %ld nsec, \n\tlog_limit: %u, \n\tcall_peer_id: %s, \n\tdb_data_path: %s, \n\tdb_public_path: %s, \n\tdb_log_path: %s\n", sock_port, pid_path, sock_buf_size, cycle_duration.tv_sec, cycle_duration.tv_nsec, log_limit, call_peer_id, db_data_path, db_public_path, db_log_path);
+#endif
     return 1;
 }
 
 int initData() {
-    if (!config_getPeerList(&peer_list, &sock_fd_tf,sock_buf_size, db_public_path)) {
+    if (!config_getPeerList(&peer_list, &sock_fd_tf, sock_buf_size, db_public_path)) {
         FREE_LIST(&peer_list);
         return 0;
     }
-    cell_peer = getPeerById(cell_peer_id, &peer_list);
-    if (cell_peer == NULL) {
+    call_peer = getPeerById(call_peer_id, &peer_list);
+    if (call_peer == NULL) {
         FREE_LIST(&peer_list);
         return 0;
     }
@@ -102,21 +109,10 @@ void initApp() {
     if (!readSettings()) {
         exit_nicely_e("initApp: failed to read settings\n");
     }
-        peer_client.sock_buf_size = sock_buf_size;
+    peer_client.sock_buf_size = sock_buf_size;
     if (!initPid(&pid_file, &proc_id, pid_path)) {
         exit_nicely_e("initApp: failed to initialize pid\n");
     }
-#ifdef MODE_DEBUG
-    printf("initApp: PID: %d\n", proc_id);
-    printf("initApp: sock_port: %d\n", sock_port);
-    printf("initApp: sock_buf_size: %d\n", sock_buf_size);
-    printf("initApp: pid_path: %s\n", pid_path);
-    printf("initApp: cell_peer_id: %s\n", cell_peer_id);
-    printf("initApp: db_data_path: %s\n", db_data_path);
-    printf("initApp: db_log_path: %s\n", db_log_path);
-    printf("initApp: db_public_path: %s\n", db_public_path);
-    printf("initApp: cycle_duration: %ld(sec) %ld(nsec)\n", cycle_duration.tv_sec, cycle_duration.tv_nsec);
-#endif
     if (!initMutex(&progl_mutex)) {
         exit_nicely_e("initApp: failed to initialize mutex\n");
     }
@@ -275,7 +271,7 @@ void serverRun(int *state, int init_state) {
                     curr->state = OFF;
                     deleteProgById(curr->id, &prog_list, db_data_path);
                     PROG_LIST_LOOP_SP
-                     loadAllProg(db_data_path, &prog_list, &peer_list);
+                    loadAllProg(db_data_path, &prog_list, &peer_list);
                     break;
                 }
                 case ACP_QUANTIFIER_SPECIFIC:
@@ -391,7 +387,7 @@ void progControl(Prog *item) {
                 char msg[LINE_SIZE];
                 snprintf(msg, sizeof msg, "check system: %s", item->description);
                 log_saveAlert(msg, log_limit, db_log_path);
-                callHuman(item, msg, cell_peer, db_public_path);
+                callHuman(item, msg, call_peer, db_public_path);
                 item->g_count = 0;
                 item->state = WGOOD;
             }

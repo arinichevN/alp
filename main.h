@@ -52,7 +52,7 @@ enum {
 struct prog_st {
     int id;
     Peer peer;
-    Peer cell_peer;
+    Peer call_peer;
     int phone_number_group_id;
     struct timespec check_interval;
     struct timespec cope_duration;

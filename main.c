@@ -41,7 +41,7 @@ int readSettings() {
     FILE* stream = fopen(CONFIG_FILE, "r");
     if (stream == NULL) {
 #ifdef MODE_DEBUG
-        fputs("ERROR: readSettings: fopen", stderr);
+        fputs("ERROR: readSettings: fopen\n", stderr);
 #endif
         return 0;
     }

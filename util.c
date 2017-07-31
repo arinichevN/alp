@@ -245,7 +245,7 @@ void printAll() {
     for (i = 0; i < peer_list.length; i++) {
         snprintf(q, sizeof q, "|%32.32s|%11p|%11u|%16u|%11d|\n",
                 peer_list.item[i].id,
-                &peer_list.item[i],
+               (void *) &peer_list.item[i],
                 peer_list.item[i].addr.sin_port,
                 peer_list.item[i].addr.sin_addr.s_addr,
                 *peer_list.item[i].fd

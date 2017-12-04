@@ -169,12 +169,8 @@ void serverRun(int *state, int init_state) {
         for (int i = 0; i < i1l.length; i++) {
             Prog *curr = getProgById(i1l.item[i], &prog_list);
             if (curr != NULL) {
-                if (lockProg(curr)) {
-                    if (!bufCatProgInit(curr, &response)) {
-                        unlockProg(curr);
-                        return;
-                    }
-                    unlockProg(curr);
+                if (!bufCatProgInit(curr, &response)) {
+                    return;
                 }
             }
         }
@@ -182,12 +178,8 @@ void serverRun(int *state, int init_state) {
         for (int i = 0; i < i1l.length; i++) {
             Prog *curr = getProgById(i1l.item[i], &prog_list);
             if (curr != NULL) {
-                if (lockProg(curr)) {
-                    if (!bufCatProgInit(curr, &response)) {
-                        unlockProg(curr);
-                        return;
-                    }
-                    unlockProg(curr);
+                if (!bufCatProgInit(curr, &response)) {
+                    return;
                 }
             }
         }

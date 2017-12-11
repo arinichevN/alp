@@ -1,5 +1,3 @@
-
-
 CREATE TABLE "prog"
 (
     "id" INTEGER PRIMARY KEY NOT NULL,
@@ -13,5 +11,3 @@ CREATE TABLE "prog"
     "enable" INTEGER NOT NULL,
     "load" INTEGER NOT NULL
 );
-
-

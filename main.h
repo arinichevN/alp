@@ -31,7 +31,6 @@
 #endif
 
 #define CONFIG_FILE "" CONF_DIR "config.tsv"
-#define CONFIG_FILE_DB "" CONF_DIR "main.conf"
 
 #define WAIT_RESP_TIMEOUT 3
 #define GOOD_COUNT 7

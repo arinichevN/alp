@@ -70,14 +70,14 @@ struct prog_st {
 };
 typedef struct prog_st Prog;
 
-DEF_LLIST(Prog)
+DEC_LLIST(Prog)
 
 #define PHONE_SIZE 12
 typedef struct {
     int id;
     char value[PHONE_SIZE];
 } Phone;
-DEF_LIST(Phone)
+DEC_LIST(Phone)
 
 typedef struct {
     sqlite3 *db;

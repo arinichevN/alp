@@ -80,7 +80,7 @@ int loadProg_callback(void *d, int argc, char **argv, char **azColName) {
     extern int sock_fd_tf;
     extern char db_public_path[LINE_SIZE];
     ProgData *data = (ProgData *) d;
-    Prog *item = (Prog *) malloc(sizeof *(item));
+    Prog *item = malloc(sizeof *(item));
     if (item == NULL) {
         fputs("loadProg_callback: failed to allocate memory\n", stderr);
         return 1;

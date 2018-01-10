@@ -287,7 +287,7 @@ int config_getPhoneNumberListG(S1List *list, int group_id, const char *db_path) 
         return 1;
     }
     size_t list_size = LINE_SIZE * n * sizeof *(list->item);
-    list->item = (char *) malloc(list_size);
+    list->item = malloc(list_size);
     if (list->item == NULL) {
 #ifdef MODE_DEBUG
         fputs("config_getPhoneNumberList: failed to allocate memory\n", stderr);
@@ -337,7 +337,7 @@ int config_getPhoneNumberListO(S1List *list, const char *db_path) {
         return 1;
     }
     size_t list_size = LINE_SIZE * n * sizeof *(list->item);
-    list->item = (char *) malloc(list_size);
+    list->item = malloc(list_size);
     if (list->item == NULL) {
 #ifdef MODE_DEBUG
         fputs("config_getPhoneNumberListO: failed to allocate memory\n", stderr);

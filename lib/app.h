@@ -132,6 +132,7 @@ enum {
     APP_EXIT
 } State;
 
+
 typedef struct {
     pthread_mutex_t self;
     pthread_mutexattr_t attr;
@@ -172,6 +173,12 @@ extern int unlockMutex(Mutex *item);
 extern void skipLine(FILE* stream);
 
 extern int createThread(pthread_t *new_thread,void *(*thread_routine) (void *),char *cmd);
+
+extern int createMThread(pthread_t *new_thread, void *(*thread_routine) (void *), void * data);
+
+extern int threadCancelDisable(int *old_state) ;
+
+extern int threadSetCancelState(int state);
 
 #endif 
 

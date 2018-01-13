@@ -2,10 +2,24 @@
 int db_open(const char *path, sqlite3 **db) {
     char q[LINE_SIZE * 2];
     snprintf(q, sizeof q, "file://%s", path);
-    int rc = sqlite3_open_v2(path, db, SQLITE_OPEN_READWRITE, NULL);
+    int rc = sqlite3_open_v2(path, db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, NULL);
     if (rc != SQLITE_OK) {
 #ifdef MODE_DEBUG
         fprintf(stderr, "db_open: path: %s, status: %d, message: %s\n", path, rc, sqlite3_errmsg(*db));
+#endif
+        sqlite3_close(*db);
+        return 0;
+    }
+    return 1;
+}
+
+int db_openR(const char *path, sqlite3 **db) {
+    char q[LINE_SIZE * 2];
+    snprintf(q, sizeof q, "file://%s", path);
+    int rc = sqlite3_open_v2(path, db, SQLITE_OPEN_READONLY |  SQLITE_OPEN_FULLMUTEX, NULL);
+    if (rc != SQLITE_OK) {
+#ifdef MODE_DEBUG
+        fprintf(stderr, "db_openR: path: %s, status: %d, message: %s\n", path, rc, sqlite3_errmsg(*db));
 #endif
         sqlite3_close(*db);
         return 0;

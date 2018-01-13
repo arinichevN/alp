@@ -1,10 +1,54 @@
-/*
- * alp
- */
 
 #include "main.h"
 
 FUN_LLIST_GET_BY_ID(Prog)
+extern int getProgByIdFDB(int prog_id, Prog *item);
+
+void cmdProgThread(Prog *item, int cmd) {
+    if (lockMutex(&item->thread_data.cmd.mutex)) {
+        item->thread_data.cmd.value = cmd;
+        item->thread_data.cmd.ready = 1;
+        unlockMutex(&item->thread_data.cmd.mutex);
+    } else {
+#ifdef MODE_DEBUG
+        fputs("cmdProgThread(): failed", stderr);
+#endif 
+    }
+}
+
+void stopProgThread(Prog *item) {
+    pthread_cancel(item->thread_data.thread);
+    pthread_join(item->thread_data.thread, NULL);
+}
+
+void stopAllProgThreads(ProgList *list) {
+    PROG_LIST_LOOP_ST
+    pthread_cancel(item->thread_data.thread);
+    PROG_LIST_LOOP_SP
+
+    PROG_LIST_LOOP_ST
+    pthread_join(item->thread_data.thread, NULL);
+    PROG_LIST_LOOP_SP
+}
+
+void freeProg(Prog*item) {
+    freeSocketFd(&item->sock_fd);
+    freeMutex(&item->mutex);
+    freeMutex(&item->thread_data.cmd.mutex);
+    free(item);
+}
+
+void freeProgList(ProgList *list) {
+    Prog *item = list->top, *temp;
+    while (item != NULL) {
+        temp = item;
+        item = item->next;
+        freeProg(temp);
+    }
+    list->top = NULL;
+    list->last = NULL;
+    list->length = 0;
+}
 
 int lockProgList() {
     extern Mutex progl_mutex;
@@ -63,8 +107,7 @@ int unlockProg(Prog *item) {
     return 1;
 }
 
-int checkProg(const Prog *item, const ProgList *list) {
-
+int checkProg(const Prog *item) {
     if (item->check_interval.tv_sec <= 0 && item->check_interval.tv_nsec <= 0) {
         fprintf(stderr, "checkProg: bad check_interval where prog id = %d\n", item->id);
         return 0;
@@ -73,11 +116,7 @@ int checkProg(const Prog *item, const ProgList *list) {
         fprintf(stderr, "checkProg: bad cope_duration where prog id = %d\n", item->id);
         return 0;
     }
-    //unique id
-    if (getProgById(item->id, list) != NULL) {
-        fprintf(stderr, "checkProg: prog with id = %d is already running\n", item->id);
-        return 0;
-    }
+
     return 1;
 }
 
@@ -103,6 +142,14 @@ char * getStateStr(char state) {
             return "OFF";
         case INIT:
             return "INIT";
+        case RUN:
+            return "RUN";
+        case STOP:
+            return "STOP";
+        case FAILURE:
+            return "FAILURE";
+        case RESET:
+            return "RESET";
         case WBAD:
             return "WBAD";
         case WCOPE:
@@ -115,28 +162,36 @@ char * getStateStr(char state) {
     return "\0";
 }
 
-int bufCatProgRuntime(const Prog *item, ACPResponse *response) {
-    char q[LINE_SIZE];
-    char *state = getStateStr(item->state);
-    struct timespec tm_rest = getTimeRestCope(item);
-    snprintf(q, sizeof q, "%d" ACP_DELIMITER_COLUMN_STR "%s" ACP_DELIMITER_COLUMN_STR "%ld" ACP_DELIMITER_ROW_STR,
-            item->id,
-            state,
-            tm_rest.tv_sec
-            );
-    return acp_responseStrCat(response, q);
+int bufCatProgRuntime(Prog *item, ACPResponse *response) {
+    if (lockMutex(&item->mutex)) {
+        char q[LINE_SIZE];
+        char *state = getStateStr(item->state);
+        struct timespec tm_rest = getTimeRestCope(item);
+        snprintf(q, sizeof q, "%d" ACP_DELIMITER_COLUMN_STR "%s" ACP_DELIMITER_COLUMN_STR "%ld" ACP_DELIMITER_ROW_STR,
+                item->id,
+                state,
+                tm_rest.tv_sec
+                );
+        unlockMutex(&item->mutex);
+        return acp_responseStrCat(response, q);
+    }
+    return 0;
 }
 
-int bufCatProgInit(const Prog *item, ACPResponse *response) {
-    char q[LINE_SIZE];
-    snprintf(q, sizeof q, "%d" ACP_DELIMITER_COLUMN_STR "%ld" ACP_DELIMITER_COLUMN_STR "%ld" ACP_DELIMITER_COLUMN_STR "%s" ACP_DELIMITER_COLUMN_STR "%d" ACP_DELIMITER_ROW_STR,
-            item->id,
-            item->check_interval.tv_sec,
-            item->cope_duration.tv_sec,
-            item->call_peer.id,
-            item->phone_number_group_id
-            );
-    return acp_responseStrCat(response, q);
+int bufCatProgInit(Prog *item, ACPResponse *response) {
+    if (lockMutex(&item->mutex)) {
+        char q[LINE_SIZE];
+        snprintf(q, sizeof q, "%d" ACP_DELIMITER_COLUMN_STR "%ld" ACP_DELIMITER_COLUMN_STR "%ld" ACP_DELIMITER_COLUMN_STR "%s" ACP_DELIMITER_COLUMN_STR "%d" ACP_DELIMITER_ROW_STR,
+                item->id,
+                item->check_interval.tv_sec,
+                item->cope_duration.tv_sec,
+                item->call_peer.id,
+                item->phone_number_group_id
+                );
+        unlockMutex(&item->mutex);
+        return acp_responseStrCat(response, q);
+    }
+    return 0;
 }
 
 void printData(ACPResponse *response) {
@@ -150,8 +205,6 @@ void printData(ACPResponse *response) {
     snprintf(q, sizeof q, "cycle_duration nsec: %ld\n", cycle_duration.tv_nsec);
     SEND_STR(q)
     snprintf(q, sizeof q, "log_limit: %d\n", log_limit);
-    SEND_STR(q)
-    snprintf(q, sizeof q, "call_peer_id: %s\n", call_peer_id);
     SEND_STR(q)
     snprintf(q, sizeof q, "db_data_path: %s\n", db_data_path);
     SEND_STR(q)
@@ -170,14 +223,13 @@ void printData(ACPResponse *response) {
     SEND_STR("+-----------+--------------------------------+-----------+-----------+-----------+\n");
     SEND_STR("|    id     |           description          |check_int_s|cope_dur_s |phone_group|\n");
     SEND_STR("+-----------+--------------------------------+-----------+-----------+-----------+\n");
-    PROG_LIST_LOOP_DF
     PROG_LIST_LOOP_ST
     snprintf(q, sizeof q, "|%11d|%32.32s|%11ld|%11ld|%11d|\n",
-            curr->id,
-            curr->description,
-            curr->check_interval.tv_sec,
-            curr->cope_duration.tv_sec,
-            curr->phone_number_group_id
+            item->id,
+            item->description,
+            item->check_interval.tv_sec,
+            item->cope_duration.tv_sec,
+            item->phone_number_group_id
             );
     SEND_STR(q);
     PROG_LIST_LOOP_SP
@@ -189,11 +241,11 @@ void printData(ACPResponse *response) {
     SEND_STR("|    id     |   state   |check_rst_s|cope_rst_s |\n")
     SEND_STR("+-----------+-----------+-----------+-----------+\n")
     PROG_LIST_LOOP_ST
-            char *state = getStateStr(curr->state);
-    struct timespec tm1 = getTimeRestCheck(curr);
-    struct timespec tm2 = getTimeRestCope(curr);
+            char *state = getStateStr(item->state);
+    struct timespec tm1 = getTimeRestCheck(item);
+    struct timespec tm2 = getTimeRestCope(item);
     snprintf(q, sizeof q, "|%11d|%11.11s|%11ld|%11ld|\n",
-            curr->id,
+            item->id,
             state,
             tm1.tv_sec,
             tm2.tv_sec
@@ -202,8 +254,6 @@ void printData(ACPResponse *response) {
     PROG_LIST_LOOP_SP
     SEND_STR("+-----------+-----------+-----------+-----------+\n")
 
-  acp_sendPeerListInfo(&peer_list, response, &peer_client);
-    
     SEND_STR_L("_\n")
 }
 

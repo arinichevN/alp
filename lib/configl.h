@@ -30,7 +30,7 @@ typedef struct {
 
 extern int config_getPeerList(PeerList *list, int *fd,  const char *db_path);
 
-extern int config_getPeer(Peer *item, char * peer_id, int *fd, sqlite3 *db);
+extern int config_getPeer(Peer *item, const char * peer_id, int *fd, sqlite3 *db, const char *db_path);
 
 extern int config_getSensorFTSList(SensorFTSList *list, PeerList *peer_list, const char *db_path);
 

@@ -216,7 +216,6 @@ int unlockMutex(Mutex *item) {
     return 1;
 }
 
-
 void skipLine(FILE* stream) {
     int x;
     while (1) {
@@ -227,12 +226,40 @@ void skipLine(FILE* stream) {
     }
 }
 
-int createThread(pthread_t *new_thread,void *(*thread_routine) (void *),char *cmd) {
+int createThread(pthread_t *new_thread, void *(*thread_routine) (void *), char *cmd) {
     *cmd = 0;
     if (pthread_create(new_thread, NULL, thread_routine, (void *) cmd) != 0) {
 #ifdef MODE_DEBUG
         perror("createThread");
 #endif
+        return 0;
+    }
+    return 1;
+}
+
+int createMThread(pthread_t *new_thread, void *(*thread_routine) (void *), void * data) {
+    if (pthread_create(new_thread, NULL, thread_routine, data) != 0) {
+#ifdef MODE_DEBUG
+        perror("createMThread()");
+#endif
+        return 0;
+    }
+    return 1;
+}
+
+int threadCancelDisable(int *old_state) {
+    int r = pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, old_state);
+    if (r != 0) {
+        perror("threadCancelDisable()");
+        return 0;
+    }
+    return 1;
+}
+
+int threadSetCancelState(int state){
+    int r=pthread_setcancelstate(state, NULL);
+    if (r != 0) {
+        perror("threadSetCancelState()");
         return 0;
     }
     return 1;

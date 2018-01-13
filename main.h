@@ -36,19 +36,35 @@
 #define GOOD_COUNT 7
 
 
-#define PROG_FIELDS "id,description,peer_id,check_interval,cope_duration,phone_number_group_id,sms,ring,enable,load"
-#define PROG_LIST_LOOP_DF Prog *curr = prog_list.top;
-#define PROG_LIST_LOOP_ST while (curr != NULL) {
-#define PROG_LIST_LOOP_SP curr = curr->next; } curr = prog_list.top;
+#define PROG_FIELDS "id,description,peer_id,call_peer_id,check_interval,cope_duration,phone_number_group_id,sms,ring,enable,load"
+
+#define PROG_LIST_LOOP_ST {Prog *item = prog_list.top; while (item != NULL) {
+#define PROG_LIST_LOOP_SP item = item->next; } item = prog_list.top;}
 
 enum {
     INIT,
+    RUN,
+    STOP,
+    RESET,
     OFF,
+    FAILURE,
     DISABLE,
     WBAD,
     WCOPE,
     WGOOD
 } StateAPP;
+
+typedef struct {
+    Mutex mutex;
+    int value;
+    int ready;
+} ThreadCmd;
+
+typedef struct {
+    ThreadCmd cmd;
+    pthread_t thread;
+    int state;
+} ThreadData;
 
 struct prog_st {
     int id;
@@ -64,8 +80,14 @@ struct prog_st {
     char state;
     Ton_ts tmr_check;
     Ton_ts tmr_cope;
-
+    char db_data_path[LINE_SIZE];
+    char db_log_path[LINE_SIZE];
+    char db_public_path[LINE_SIZE];
+    struct timespec cycle_duration;
+    int log_limit;
+    int sock_fd;
     Mutex mutex;
+    ThreadData thread_data;
     struct prog_st *next;
 };
 typedef struct prog_st Prog;
@@ -80,33 +102,28 @@ typedef struct {
 DEC_LIST(Phone)
 
 typedef struct {
-    sqlite3 *db;
-    PeerList *peer_list;
-    ProgList *prog_list;
+   sqlite3 *db;
+    Prog * prog;
 } ProgData;
 
-extern int readSettings() ;
+extern int readSettings();
 
-extern int initData() ;
+extern int initData();
 
-extern void initApp() ;
+extern void initApp();
 
-extern void serverRun(int *state, int init_state) ;
+extern void serverRun(int *state, int init_state);
 
-extern void progControl(Prog *item) ;
+extern void progControl(Prog *item);
 
-extern void *threadFunction(void *arg) ;
+extern void *threadFunction(void *arg);
 
-extern int createThread_ctl() ;
+extern void freeData();
 
-extern void freeProg(ProgList *list) ;
+extern void freeApp();
 
-extern void freeData() ;
+extern void exit_nicely();
 
-extern void freeApp() ;
-
-extern void exit_nicely() ;
-
-extern void exit_nicely_e(char *s) ;
+extern void exit_nicely_e(char *s);
 #endif 
 

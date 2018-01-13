@@ -54,7 +54,6 @@ typedef struct {
     socklen_t addr_size;
     int active;
     struct timespec time1;
-    Mutex mutex;
 } Peer;
 
 DEC_LIST(Peer)
@@ -204,15 +203,11 @@ DEC_FUN_LOCK(SensorInt)
 
 DEC_FUN_LOCK(SensorFTS)
 
-DEC_FUN_LOCK(Peer)
-
 DEC_FUN_LOCK(EM)
 
 DEC_FUN_UNLOCK(SensorInt)
 
 DEC_FUN_UNLOCK(SensorFTS)
-
-DEC_FUN_UNLOCK(Peer)
 
 DEC_FUN_UNLOCK(EM)
         

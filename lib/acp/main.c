@@ -7,18 +7,6 @@ FUN_LIST_GET_BY_ID(SensorFTS)
 
 FUN_LIST_GET_BY_ID(EM)
 
-FUN_LOCK(SensorInt)
-
-FUN_LOCK(SensorFTS)
-
-FUN_LOCK(EM)
-
-FUN_UNLOCK(SensorInt)
-
-FUN_UNLOCK(SensorFTS)
-
-FUN_UNLOCK(EM)
-
 FUN_LIST_INIT(I1)
 
 FUN_LIST_INIT(I2)
@@ -822,119 +810,84 @@ FUN_ACP_RESPONSE_READ(I2List)
 FUN_ACP_RESPONSE_READ(I1F1List)
 FUN_ACP_RESPONSE_READ(FTSList)
 int acp_setEMOutput(EM *em, int output) {
-    if (lockEM(em)) {
-
-        if (output == ((int) em->last_output)) {
-
-            unlockEM(em);
+        if (output == ((int) em->last_output)) {         
             return 0;
         }
         I2 di[1];
         di[0].p0 = em->remote_id;
         di[0].p1 = output;
         I2List data = {di, 1, 1};
-        if (!acp_requestSendUnrequitedI2List(ACP_CMD_SET_INT, &data, em->source)) {
+        if (!acp_requestSendUnrequitedI2List(ACP_CMD_SET_INT, &data, &em->peer)) {
 #ifdef MODE_DEBUG
             fprintf(stderr, "acp_setEMOutput(): failed to send request where em.id = %d\n", em->id);
 #endif
-
-            unlockEM(em);
             return 0;
         }
         em->last_output = (float) output;
-
-        unlockEM(em);
         return 1;
-
-    }
-    return 0;
 }
 
 int acp_setEMDutyCycle(EM *em, float output) {
-    if (lockEM(em)) {
         if (output == em->last_output) {
-            unlockEM(em);
             return 0;
         }
         I2 di[1];
         di[0].p0 = em->remote_id;
         di[0].p1 = (int) output;
         I2List data = {di, 1, 1};
-        if (!acp_requestSendUnrequitedI2List(ACP_CMD_SET_PWM_DUTY_CYCLE, &data, em->source)) {
+        if (!acp_requestSendUnrequitedI2List(ACP_CMD_SET_PWM_DUTY_CYCLE, &data, &em->peer)) {
 #ifdef MODE_DEBUG
             fprintf(stderr, "acp_setEMDutyCycle(): failed to send request where em.id = %d\n", em->id);
 #endif
-            unlockEM(em);
             return 0;
         }
         em->last_output = output;
-        unlockEM(em);
         return 1;
-    }
-    return 0;
+
 }
 
 int acp_setEMOutputR(EM *em, int output) {
-    if (lockEM(em)) {
-
         I2 di[1];
         di[0].p0 = em->remote_id;
         di[0].p1 = output;
         I2List data = {di, 1, 1};
-        if (!acp_requestSendUnrequitedI2List(ACP_CMD_SET_INT, &data, em->source)) {
+        if (!acp_requestSendUnrequitedI2List(ACP_CMD_SET_INT, &data, &em->peer)) {
 #ifdef MODE_DEBUG
             fprintf(stderr, "acp_setEMOutput(): failed to send request where em.id = %d\n", em->id);
 #endif
-
-            unlockEM(em);
             return 0;
         }
         em->last_output = (float) output;
-
-        unlockEM(em);
         return 1;
-
-    }
-    return 0;
 }
 
 int acp_setEMDutyCycleR(EM *em, float output) {
-    if (lockEM(em)) {
-
         I2 di[1];
         di[0].p0 = em->remote_id;
         di[0].p1 = (int) output;
         I2List data = {di, 1, 1};
-        if (!acp_requestSendUnrequitedI2List(ACP_CMD_SET_PWM_DUTY_CYCLE, &data, em->source)) {
+        if (!acp_requestSendUnrequitedI2List(ACP_CMD_SET_PWM_DUTY_CYCLE, &data, &em->peer)) {
 #ifdef MODE_DEBUG
             fprintf(stderr, "ERROR: acp_setEMDutyCycle(): failed to send request where em.id = %d\n", em->id);
 #endif
-
-            unlockEM(em);
             return 0;
         }
         em->last_output = output;
-
-        unlockEM(em);
         return 1;
-
-    }
-    return 0;
 }
 
 int acp_readSensorInt(SensorInt *s) {
-    if (lockSensorInt(s)) {
         struct timespec now = getCurrentTime();
         /*
                     if (!timeHasPassed(s->interval_min, s->last_read_time, now)) {
                          
-                        unlockSensorInt(s);
+                        
                         return s->last_return;
                     }
          */
 
-        s->source->active = 0;
-        s->source->time1 = now;
+        s->peer.active = 0;
+        s->peer.time1 = now;
         s->last_read_time = now;
         s->last_return = 0;
 
@@ -942,12 +895,12 @@ int acp_readSensorInt(SensorInt *s) {
         di[0] = s->remote_id;
         I1List data = {di, 1, 1};
         ACPRequest request;
-        if (!acp_requestSendI1List(ACP_CMD_GET_INT, &data, &request, s->source)) {
+        if (!acp_requestSendI1List(ACP_CMD_GET_INT, &data, &request, &s->peer)) {
 #ifdef MODE_DEBUG
             fprintf(stderr, "acp_readSensorInt(): acp_requestSendI1List failed where sensor.id = %d\n", s->id);
 #endif
 
-            unlockSensorInt(s);
+            
             return 0;
         }
 
@@ -960,15 +913,15 @@ int acp_readSensorInt(SensorInt *s) {
         for (i = 0; i < ACP_RETRY_NUM; i++) {
             memset(&td, 0, sizeof tl);
             tl.length = 0;
-            if (!acp_responseReadI2List(&tl, &request, s->source)) {
+            if (!acp_responseReadI2List(&tl, &request, &s->peer)) {
 #ifdef MODE_DEBUG
                 fprintf(stderr, "acp_readSensorInt(): acp_responseReadI2List() error where sensor.id = %d\n", s->id);
 #endif
 
-                unlockSensorInt(s);
+                
                 return 0;
             }
-            s->source->active = 1;
+            s->peer.active = 1;
             if (tl.item[0].p0 == s->remote_id) {
                 done = 1;
                 break;
@@ -977,37 +930,27 @@ int acp_readSensorInt(SensorInt *s) {
             fprintf(stderr, "acp_readSensorInt(): response:  peer returned id=%d but requested one was %d\n", tl.item[0].p0, s->remote_id);
 #endif
         }
-        if (!done) {
-
-            unlockSensorInt(s);
+        if (!done) { 
             return 0;
         }
-        s->source->active = 1;
+        s->peer.active = 1;
         s->value = tl.item[0].p1;
         s->last_return = 1;
-
-        unlockSensorInt(s);
         return 1;
-
-        unlockSensorInt(s);
-    }
-    return 0;
 }
 
 int acp_readSensorFTS(SensorFTS *s) {
-    if (lockSensorFTS(s)) {
-
         struct timespec now = getCurrentTime();
         /*
                     if (!timeHasPassed(s->interval_min, s->last_read_time, now)) {
                            
-                        unlockSensorFTS(s);
+                        
                         return s->last_return;
                     }
          */
 
-        s->source->active = 0;
-        s->source->time1 = now;
+        s->peer.active = 0;
+        s->peer.time1 = now;
         s->last_read_time = now;
         s->last_return = 0;
         s->value.state = 0;
@@ -1016,12 +959,12 @@ int acp_readSensorFTS(SensorFTS *s) {
         di[0] = s->remote_id;
         I1List data = {di, 1, 1};
         ACPRequest request;
-        if (!acp_requestSendI1List(ACP_CMD_GET_FTS, &data, &request, s->source)) {
+        if (!acp_requestSendI1List(ACP_CMD_GET_FTS, &data, &request, &s->peer)) {
 #ifdef MODE_DEBUG
             fprintf(stderr, "acp_readSensorFTS(): acp_requestSendI1List failed where sensor.id = %d and remote_id=%d\n", s->id, s->remote_id);
 #endif
 
-            unlockSensorFTS(s);
+            
             return 0;
         }
 
@@ -1031,21 +974,21 @@ int acp_readSensorFTS(SensorFTS *s) {
 
         memset(&td, 0, sizeof tl);
         tl.length = 0;
-        if (!acp_responseReadFTSList(&tl, &request, s->source)) {
+        if (!acp_responseReadFTSList(&tl, &request, &s->peer)) {
 #ifdef MODE_DEBUG
             fprintf(stderr, "acp_readSensorFTS(): acp_responseReadFTSList() error where sensor.id = %d and remote_id=%d\n", s->id, s->remote_id);
 #endif
 
-            unlockSensorFTS(s);
+            
             return 0;
         }
-        s->source->active = 1;
+        s->peer.active = 1;
         if (tl.item[0].id != s->remote_id) {
 #ifdef MODE_DEBUG
             fprintf(stderr, "acp_readSensorFTS(): response: peer returned id=%d but requested one was %d\n", tl.item[0].id, s->remote_id);
 #endif
 
-            unlockSensorFTS(s);
+            
             return 0;
         }
         if (tl.length != 1) {
@@ -1053,28 +996,22 @@ int acp_readSensorFTS(SensorFTS *s) {
             fprintf(stderr, "acp_readSensorFTS(): response: number of items = %d but 1 expected\n", tl.length != 1);
 #endif
 
-            unlockSensorFTS(s);
+            
             return 0;
         }
         if (tl.item[0].state != 1) {
 #ifdef MODE_DEBUG
             fprintf(stderr, "acp_readSensorFTS(): response: FTS state is bad where sensor.id = %d and remote_id=%d\n", s->id, s->remote_id);
 #endif
-            s->source->active = 1;
+            s->peer.active = 1;
 
-            unlockSensorFTS(s);
+            
             return 0;
         }
-        s->source->active = 1;
+        s->peer.active = 1;
         s->value = tl.item[0];
         s->last_return = 1;
-
-        unlockSensorFTS(s);
         return 1;
-
-        unlockSensorFTS(s);
-    }
-    return 0;
 }
 
 int acp_getFTS(FTS *output, Peer *peer, int remote_id) {

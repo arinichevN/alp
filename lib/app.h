@@ -139,7 +139,12 @@ typedef struct {
     int created;
     int attr_initialized;
 } Mutex;
-
+#define MUTEX_INITIALIZER {.self=PTHREAD_MUTEX_INITIALIZER, .created = 0, .attr_initialized = 0}
+#define MUTEX pthread_mutex_t
+#define DEF_MUTEX(V) pthread_mutex_t V = PTHREAD_MUTEX_INITIALIZER;
+#define IF_LOCK_MUTEX(P) if(pthread_mutex_lock(P) != 0)
+#define IF_TRYLOCK_MUTEX(P) if(pthread_mutex_trylock(P) != 0)
+#define UNLOCK_MUTEX(P) pthread_mutex_unlock(P)
 extern void putse(const char *str);
 
 extern void printfe(const char *str, ...);

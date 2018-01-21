@@ -2,43 +2,72 @@
 #include "main.h"
 
 FUN_LLIST_GET_BY_ID(Prog)
-extern int getProgByIdFDB(int prog_id, Prog *item);
+extern int getProgByIdFDB(int prog_id, Prog *item, PeerList *peer_list, sqlite3 *dbl, const char *db_path);
 
-void cmdProgThread(Prog *item, int cmd) {
-    if (lockMutex(&item->thread_data.cmd.mutex)) {
-        item->thread_data.cmd.value = cmd;
-        item->thread_data.cmd.ready = 1;
-        unlockMutex(&item->thread_data.cmd.mutex);
-    } else {
+void stopProgThread(Prog *item) {
 #ifdef MODE_DEBUG
-        fputs("cmdProgThread(): failed", stderr);
-#endif 
+    printf("signaling thread %d to cancel...\n", item->id);
+#endif
+    if (pthread_cancel(item->thread) != 0) {
+#ifdef MODE_DEBUG
+        perror("pthread_cancel()");
+#endif
+    }
+    void * result;
+#ifdef MODE_DEBUG
+    printf("joining thread %d...\n", item->id);
+#endif
+    if (pthread_join(item->thread, &result) != 0) {
+#ifdef MODE_DEBUG
+        perror("pthread_join()");
+#endif
+    }
+    if (result != PTHREAD_CANCELED) {
+#ifdef MODE_DEBUG
+        printf("thread %d not canceled\n", item->id);
+#endif
     }
 }
 
-void stopProgThread(Prog *item) {
-    pthread_cancel(item->thread_data.thread);
-    pthread_join(item->thread_data.thread, NULL);
-}
-
-void stopAllProgThreads(ProgList *list) {
+void stopAllProgThreads(ProgList * list) {
     PROG_LIST_LOOP_ST
-    pthread_cancel(item->thread_data.thread);
+#ifdef MODE_DEBUG
+            printf("signaling thread %d to cancel...\n", item->id);
+#endif
+    if (pthread_cancel(item->thread) != 0) {
+#ifdef MODE_DEBUG
+        perror("pthread_cancel()");
+#endif
+    }
     PROG_LIST_LOOP_SP
 
     PROG_LIST_LOOP_ST
-    pthread_join(item->thread_data.thread, NULL);
+            void * result;
+#ifdef MODE_DEBUG
+    printf("joining thread %d...\n", item->id);
+#endif
+    if (pthread_join(item->thread, &result) != 0) {
+#ifdef MODE_DEBUG
+        perror("pthread_join()");
+#endif
+    }
+    if (result != PTHREAD_CANCELED) {
+#ifdef MODE_DEBUG
+        printf("thread %d not canceled\n", item->id);
+#endif
+    }
     PROG_LIST_LOOP_SP
 }
 
-void freeProg(Prog*item) {
+void freeProg(Prog * item) {
     freeSocketFd(&item->sock_fd);
-    freeMutex(&item->mutex);
-    freeMutex(&item->thread_data.cmd.mutex);
+    //  freeMutex(&item->mutex);
+    //  freeMutex(&item->canceled_mutex);
+    //  freeMutex(&item->cmd_mutex);
     free(item);
 }
 
-void freeProgList(ProgList *list) {
+void freeProgList(ProgList * list) {
     Prog *item = list->top, *temp;
     while (item != NULL) {
         temp = item;
@@ -80,34 +109,7 @@ int unlockProgList() {
     return 1;
 }
 
-int lockProg(Prog *item) {
-    if (pthread_mutex_lock(&(item->mutex.self)) != 0) {
-#ifdef MODE_DEBUG
-        perror("lockProg: error locking mutex");
-#endif 
-        return 0;
-    }
-    return 1;
-}
-
-int tryLockProg(Prog *item) {
-    if (pthread_mutex_trylock(&(item->mutex.self)) != 0) {
-        return 0;
-    }
-    return 1;
-}
-
-int unlockProg(Prog *item) {
-    if (pthread_mutex_unlock(&(item->mutex.self)) != 0) {
-#ifdef MODE_DEBUG
-        perror("unlockProg: error unlocking mutex (CMD_GET_ALL)");
-#endif 
-        return 0;
-    }
-    return 1;
-}
-
-int checkProg(const Prog *item) {
+int checkProg(const Prog * item) {
     if (item->check_interval.tv_sec <= 0 && item->check_interval.tv_nsec <= 0) {
         fprintf(stderr, "checkProg: bad check_interval where prog id = %d\n", item->id);
         return 0;
@@ -128,11 +130,11 @@ struct timespec getTimeRestL(struct timespec interval, Ton_ts tmr) {
     return out;
 }
 
-struct timespec getTimeRestCope(const Prog *item) {
+struct timespec getTimeRestCope(const Prog * item) {
     return getTimeRestL(item->cope_duration, item->tmr_cope);
 }
 
-struct timespec getTimeRestCheck(const Prog *item) {
+struct timespec getTimeRestCheck(const Prog * item) {
     return getTimeRestL(item->check_interval, item->tmr_check);
 }
 
@@ -162,7 +164,7 @@ char * getStateStr(char state) {
     return "\0";
 }
 
-int bufCatProgRuntime(Prog *item, ACPResponse *response) {
+int bufCatProgRuntime(Prog *item, ACPResponse * response) {
     if (lockMutex(&item->mutex)) {
         char q[LINE_SIZE];
         char *state = getStateStr(item->state);
@@ -178,7 +180,7 @@ int bufCatProgRuntime(Prog *item, ACPResponse *response) {
     return 0;
 }
 
-int bufCatProgInit(Prog *item, ACPResponse *response) {
+int bufCatProgInit(Prog *item, ACPResponse * response) {
     if (lockMutex(&item->mutex)) {
         char q[LINE_SIZE];
         snprintf(q, sizeof q, "%d" ACP_DELIMITER_COLUMN_STR "%ld" ACP_DELIMITER_COLUMN_STR "%ld" ACP_DELIMITER_COLUMN_STR "%s" ACP_DELIMITER_COLUMN_STR "%d" ACP_DELIMITER_ROW_STR,
@@ -194,7 +196,7 @@ int bufCatProgInit(Prog *item, ACPResponse *response) {
     return 0;
 }
 
-void printData(ACPResponse *response) {
+void printData(ACPResponse * response) {
     char q[LINE_SIZE];
     snprintf(q, sizeof q, "CONFIG_FILE: %s\n", CONFIG_FILE);
     SEND_STR(q)
@@ -257,7 +259,7 @@ void printData(ACPResponse *response) {
     SEND_STR_L("_\n")
 }
 
-void printHelp(ACPResponse *response) {
+void printHelp(ACPResponse * response) {
     char q[LINE_SIZE];
     SEND_STR("COMMAND LIST\n")
     snprintf(q, sizeof q, "%s\tput process into active mode; process will read configuration\n", ACP_CMD_APP_START);
@@ -279,6 +281,10 @@ void printHelp(ACPResponse *response) {
     snprintf(q, sizeof q, "%s\tunload program from RAM; program id expected\n", ACP_CMD_PROG_STOP);
     SEND_STR(q)
     snprintf(q, sizeof q, "%s\tunload program from RAM, after that load it; program id expected\n", ACP_CMD_RESET);
+    SEND_STR(q)
+    snprintf(q, sizeof q, "%s\tenable running program; program id expected\n", ACP_CMD_PROG_ENABLE);
+    SEND_STR(q)
+    snprintf(q, sizeof q, "%s\tdisable running program; program id expected\n", ACP_CMD_PROG_DISABLE);
     SEND_STR(q)
     snprintf(q, sizeof q, "%s\tget prog runtime data in format:  progId_state_stateEM_output_timeRestSecToEMSwap; program id expected\n", ACP_CMD_PROG_GET_DATA_RUNTIME);
     SEND_STR(q)

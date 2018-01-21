@@ -1,44 +1,6 @@
 
 #include "main.h"
 
-void saveProgLoad(int id, int v, sqlite3 *db) {
-    char q[LINE_SIZE];
-    snprintf(q, sizeof q, "update prog set load=%d where id=%d", v, id);
-    if (!db_exec(db, q, 0, 0)) {
-#ifdef MODE_DEBUG
-        fprintf(stderr, "saveProgLoad(): query failed: %s\n", q);
-#endif
-    }
-}
-
-void saveProgLoadP(int id, int v, const char* db_path) {
-    sqlite3 *db;
-    if (!db_open(db_path, &db)) {
-        printfe("saveProgLoadP(): failed to open db: %s\n", db_path);
-        return;
-    }
-    char q[LINE_SIZE];
-    snprintf(q, sizeof q, "update prog set load=%d where id=%d", v, id);
-    if (!db_exec(db, q, 0, 0)) {
-#ifdef MODE_DEBUG
-        fprintf(stderr, "saveProgLoadP(): query failed: %s\n", q);
-#endif
-    }
-}
-
-void saveProgEnable(int id, int v, const char* db_path) {
-    sqlite3 *db;
-    if (!db_open(db_path, &db)) {
-        printfe("saveProgEnable(): failed to open db: %s\n", db_path);
-        return;
-    }
-    char q[LINE_SIZE];
-    snprintf(q, sizeof q, "update prog set enable=%d where id=%d", v, id);
-    if (!db_exec(db, q, 0, 0)) {
-        printfe("saveProgEnable(): query failed: %s\n", q);
-    }
-}
-
 void saveProgSMS(int id, int value, const char* db_path) {
     sqlite3 *db;
     if (!db_open(db_path, &db)) {
@@ -79,9 +41,9 @@ int addProg(Prog *item, ProgList *list) {
         list->top = item;
         unlockProgList();
     } else {
-        lockProg(list->last);
+        lockMutex(&list->last->mutex);
         list->last->next = item;
-        unlockProg(list->last);
+        unlockMutex(&list->last->mutex);
     }
     list->last = item;
     list->length++;
@@ -91,7 +53,7 @@ int addProg(Prog *item, ProgList *list) {
     return 1;
 }
 
-int addProgById(int prog_id, ProgList *list) {
+int addProgById(int prog_id, ProgList *list, PeerList *peer_list, sqlite3 *db_data, const char *db_data_path) {
     Prog *rprog = getProgById(prog_id, list);
     if (rprog != NULL) {//program is already running
 #ifdef MODE_DEBUG
@@ -108,54 +70,51 @@ int addProgById(int prog_id, ProgList *list) {
     memset(item, 0, sizeof *item);
     item->id = prog_id;
     item->next = NULL;
-    strcpy(item->db_data_path, db_data_path);
-    strcpy(item->db_public_path, db_public_path);
-    strcpy(item->db_log_path, db_log_path);
+
     item->cycle_duration = cycle_duration;
     item->log_limit = log_limit;
-    item->thread_data.cmd.ready = 0;
-    item->thread_data.cmd.value = OFF;
-    item->thread_data.state = INIT;
+
     if (!initMutex(&item->mutex)) {
         free(item);
         return 0;
     }
-    if (!initMutex(&item->thread_data.cmd.mutex)) {
-        freeMutex(&item->mutex);
+    if (!initMutex(&item->canceled_mutex)) {
+        free(item);
+        return 0;
+    }
+    if (!initMutex(&item->cmd_mutex)) {
         free(item);
         return 0;
     }
     if (!initClient(&item->sock_fd, WAIT_RESP_TIMEOUT)) {
-        freeMutex(&item->thread_data.cmd.mutex);
         freeMutex(&item->mutex);
         free(item);
         return 0;
     }
-    if (!getProgByIdFDB(item->id, item)) {
+    if (!getProgByIdFDB(item->id, item, peer_list, db_data, db_data_path)) {
         freeSocketFd(&item->sock_fd);
-        freeMutex(&item->thread_data.cmd.mutex);
         freeMutex(&item->mutex);
         free(item);
         return 0;
     }
+    item->peer.fd = &item->sock_fd;
+    item->call_peer.fd = &item->sock_fd;
+    item->thread_canceled = 0;
+    item->cmd = OFF;
     if (!checkProg(item)) {
         freeSocketFd(&item->sock_fd);
-        freeMutex(&item->thread_data.cmd.mutex);
         freeMutex(&item->mutex);
         free(item);
         return 0;
     }
-    printf("SIZE OF PROG: %d\n", sizeof *item);
     if (!addProg(item, list)) {
         freeSocketFd(&item->sock_fd);
-        freeMutex(&item->thread_data.cmd.mutex);
         freeMutex(&item->mutex);
         free(item);
         return 0;
     }
-    if (!createMThread(&item->thread_data.thread, &threadFunction, item)) {
+    if (!createMThread(&item->thread, &threadFunction, item)) {
         freeSocketFd(&item->sock_fd);
-        freeMutex(&item->thread_data.cmd.mutex);
         freeMutex(&item->mutex);
         free(item);
         return 0;
@@ -163,7 +122,7 @@ int addProgById(int prog_id, ProgList *list) {
     return 1;
 }
 
-int deleteProgById(int id, ProgList *list) {
+int deleteProgById(int id, ProgList *list, char *db_data_path) {
 #ifdef MODE_DEBUG
     printf("prog to delete: %d\n", id);
 #endif
@@ -173,9 +132,9 @@ int deleteProgById(int id, ProgList *list) {
     while (curr != NULL) {
         if (curr->id == id) {
             if (prev != NULL) {
-                lockProg(prev);
+                lockMutex(&prev->mutex);
                 prev->next = curr->next;
-                unlockProg(prev);
+                unlockMutex(&prev->mutex);
             } else {//curr=top
                 lockProgList();
                 list->top = curr->next;
@@ -185,8 +144,8 @@ int deleteProgById(int id, ProgList *list) {
                 list->last = prev;
             }
             list->length--;
-            saveProgLoadP(curr->id, 0, curr->db_data_path);
             stopProgThread(curr);
+            config_saveProgLoad(curr->id, 0, NULL, db_data_path);
             freeProg(curr);
 #ifdef MODE_DEBUG
             printf("prog with id: %d deleted from prog_list\n", id);
@@ -202,11 +161,11 @@ int deleteProgById(int id, ProgList *list) {
 }
 
 int loadActiveProg_callback(void *d, int argc, char **argv, char **azColName) {
-    ProgList *list = d;
+    ProgData *data = d;
     for (int i = 0; i < argc; i++) {
         if (DB_COLUMN_IS("id")) {
             int id = atoi(argv[i]);
-            addProgById(id, list);
+            addProgById(id, data->prog_list, data->peer_list, data->db_data, NULL);
         } else {
             fputs("loadActiveProg_callback(): unknown column\n", stderr);
         }
@@ -214,13 +173,14 @@ int loadActiveProg_callback(void *d, int argc, char **argv, char **azColName) {
     return EXIT_SUCCESS;
 }
 
-int loadActiveProg(ProgList *list, char *db_path) {
+int loadActiveProg(ProgList *list, PeerList *peer_list, char *db_path) {
     sqlite3 *db;
-    if (!db_openR(db_path, &db)) {
+    if (!db_open(db_path, &db)) {
         return 0;
     }
+    ProgData data = {.prog_list = list, .peer_list = peer_list, .db_data = db};
     char *q = "select id from prog where load=1";
-    if (!db_exec(db, q, loadActiveProg_callback, list)) {
+    if (!db_exec(db, q, loadActiveProg_callback, &data)) {
 #ifdef MODE_DEBUG
         fprintf(stderr, "loadActiveProg(): query failed: %s\n", q);
 #endif
@@ -262,13 +222,17 @@ int getProg_callback(void *d, int argc, char **argv, char **azColName) {
         if (DB_COLUMN_IS("id")) {
             item->id = atoi(argv[i]);
         } else if (DB_COLUMN_IS("peer_id")) {
-            if (!config_getPeer(&item->peer, argv[i], &item->sock_fd, NULL, item->db_public_path)) {
+            Peer *peer = getPeerById(argv[i], data->peer_list);
+            if (peer == NULL) {
                 return EXIT_FAILURE;
             }
+            item->peer = *peer;
         } else if (DB_COLUMN_IS("call_peer_id")) {
-            if (!config_getPeer(&item->call_peer, argv[i], &item->sock_fd, NULL, item->db_public_path)) {
+            Peer *peer = getPeerById(argv[i], data->peer_list);
+            if (peer == NULL) {
                 return EXIT_FAILURE;
             }
+            item->call_peer = *peer;
         } else if (DB_COLUMN_IS("description")) {
             memcpy(item->description, argv[i], sizeof item->description);
         } else if (DB_COLUMN_IS("check_interval")) {
@@ -298,18 +262,28 @@ int getProg_callback(void *d, int argc, char **argv, char **azColName) {
         item->state = DISABLE;
     }
     if (!load) {
-        saveProgLoad(item->id, 1, data->db);
+        config_saveProgLoad(item->id, 1, data->db_data, NULL);
     }
     return EXIT_SUCCESS;
 }
 
-int getProgByIdFDB(int prog_id, Prog *item) {
-    sqlite3 *db;
-    if (!db_openR(db_data_path, &db)) {
+int getProgByIdFDB(int prog_id, Prog *item, PeerList *peer_list, sqlite3 *dbl, const char *db_path) {
+    if (dbl != NULL && db_path != NULL) {
+#ifdef MODE_DEBUG
+        fprintf(stderr, "getProgByIdFDB(): db xor db_path expected\n");
+#endif
         return 0;
     }
+    sqlite3 *db;
+    if (db_path != NULL) {
+        if (!db_open(db_path, &db)) {
+            return 0;
+        }
+    } else {
+        db = dbl;
+    }
     char q[LINE_SIZE];
-    ProgData data = {.db = db, .prog = item};
+    ProgData data = {.peer_list = peer_list, .prog = item, .db_data = db};
     snprintf(q, sizeof q, "select " PROG_FIELDS " from prog where id=%d", prog_id);
     if (!db_exec(db, q, getProg_callback, &data)) {
 #ifdef MODE_DEBUG

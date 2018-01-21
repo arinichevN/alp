@@ -54,18 +54,6 @@ enum {
     WGOOD
 } StateAPP;
 
-typedef struct {
-    Mutex mutex;
-    int value;
-    int ready;
-} ThreadCmd;
-
-typedef struct {
-    ThreadCmd cmd;
-    pthread_t thread;
-    int state;
-} ThreadData;
-
 struct prog_st {
     int id;
     Peer peer;
@@ -80,14 +68,16 @@ struct prog_st {
     char state;
     Ton_ts tmr_check;
     Ton_ts tmr_cope;
-    char db_data_path[LINE_SIZE];
-    char db_log_path[LINE_SIZE];
-    char db_public_path[LINE_SIZE];
+    
     struct timespec cycle_duration;
     int log_limit;
     int sock_fd;
     Mutex mutex;
-    ThreadData thread_data;
+    pthread_t thread;
+    int thread_canceled;
+    Mutex canceled_mutex;
+    Mutex cmd_mutex;
+    int cmd;
     struct prog_st *next;
 };
 typedef struct prog_st Prog;
@@ -102,8 +92,10 @@ typedef struct {
 DEC_LIST(Phone)
 
 typedef struct {
-   sqlite3 *db;
+    ProgList *prog_list;
+   PeerList *peer_list;
     Prog * prog;
+    sqlite3 *db_data;
 } ProgData;
 
 extern int readSettings();

@@ -6,7 +6,6 @@ int acp_sendSMS(Peer *peer, const char *phone, const char *message) {
     memcpy(di[0].p0, phone, LINE_SIZE);
     memcpy(di[0].p1, message, LINE_SIZE);
     S2List data = {.item = di, .length = 1, .max_length = 1};
-    puts("sending request...");
     if (!acp_requestSendUnrequitedS2List(ACP_CMD_MOBILE_SEND_SMS, &data, peer)) {
 #ifdef MODE_DEBUG
         fprintf(stderr, "ERROR: acp_sendSMS: failed to send request where peer.id = %s\n", peer->id);

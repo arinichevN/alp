@@ -14,7 +14,11 @@ int log_limit = 0;
 Peer peer_client = {.fd = &sock_fd, .addr_size = sizeof peer_client.addr};
 struct timespec cycle_duration = {0, 0};
 I1List i1l;
-Mutex progl_mutex = {.created = 0, .attr_initialized = 0};
+Mutex progl_mutex = MUTEX_INITIALIZER;
+Mutex db_data_mutex = MUTEX_INITIALIZER;
+Mutex db_public_mutex = MUTEX_INITIALIZER;
+
+PeerList peer_list;
 ProgList prog_list = {NULL, NULL, 0};
 
 #include "util.c"
@@ -56,12 +60,19 @@ int readSettings() {
 }
 
 int initData() {
-    if (!loadActiveProg(&prog_list, db_data_path)) {
+    if (!initI1List(&i1l, ACP_BUFFER_MAX_SIZE)) {
         freeProgList(&prog_list);
         return 0;
     }
-    if (!initI1List(&i1l, ACP_BUFFER_MAX_SIZE)) {
+
+    if (!config_getPeerList(&peer_list, NULL, db_public_path)) {
+        FREE_LIST(&i1l);
+        return 0;
+    }
+    if (!loadActiveProg(&prog_list, &peer_list, db_data_path)) {
         freeProgList(&prog_list);
+        FREE_LIST(&peer_list);
+        FREE_LIST(&i1l);
         return 0;
     }
     return 1;
@@ -72,7 +83,13 @@ void initApp() {
         exit_nicely_e("initApp: failed to read settings\n");
     }
     if (!initMutex(&progl_mutex)) {
-        exit_nicely_e("initApp: failed to initialize mutex\n");
+        exit_nicely_e("initApp: failed to initialize progl_mutex\n");
+    }
+    if (!initMutex(&db_data_mutex)) {
+        exit_nicely_e("initApp: failed to initialize db_data_mutex\n");
+    }
+    if (!initMutex(&db_public_mutex)) {
+        exit_nicely_e("initApp: failed to initialize db_public_mutex\n");
     }
     if (!initServer(&sock_fd, sock_port)) {
         exit_nicely_e("initApp: failed to initialize udp server\n");
@@ -87,6 +104,8 @@ void serverRun(int *state, int init_state) {
             ACP_CMD_IS(ACP_CMD_PROG_STOP) ||
             ACP_CMD_IS(ACP_CMD_PROG_START) ||
             ACP_CMD_IS(ACP_CMD_PROG_RESET) ||
+            ACP_CMD_IS(ACP_CMD_PROG_ENABLE) ||
+            ACP_CMD_IS(ACP_CMD_PROG_DISABLE) ||
             ACP_CMD_IS(ACP_CMD_PROG_GET_DATA_INIT) ||
             ACP_CMD_IS(ACP_CMD_PROG_GET_DATA_RUNTIME)
             ) {
@@ -99,27 +118,76 @@ void serverRun(int *state, int init_state) {
         return;
     }
     if (ACP_CMD_IS(ACP_CMD_PROG_STOP)) {
-        for (int i = 0; i < i1l.length; i++) {
-            Prog *item = getProgById(i1l.item[i], &prog_list);
-            if (item != NULL) {
-                deleteProgById(i1l.item[i], &prog_list);
+
+        if (lockMutex(&db_data_mutex)) {
+            for (int i = 0; i < i1l.length; i++) {
+                Prog *item = getProgById(i1l.item[i], &prog_list);
+                if (item != NULL) {
+                    deleteProgById(i1l.item[i], &prog_list, db_data_path);
+                }
             }
+            unlockMutex(&db_data_mutex);
         }
         return;
     } else if (ACP_CMD_IS(ACP_CMD_PROG_START)) {
-        for (int i = 0; i < i1l.length; i++) {
-            addProgById(i1l.item[i], &prog_list);
+
+        if (lockMutex(&db_data_mutex)) {
+            for (int i = 0; i < i1l.length; i++) {
+                addProgById(i1l.item[i], &prog_list, &peer_list, NULL, db_data_path);
+            }
+            unlockMutex(&db_data_mutex);
         }
         return;
     } else if (ACP_CMD_IS(ACP_CMD_PROG_RESET)) {
+
+        if (lockMutex(&db_data_mutex)) {
+            for (int i = 0; i < i1l.length; i++) {
+                Prog *item = getProgById(i1l.item[i], &prog_list);
+                if (item != NULL) {
+                    deleteProgById(i1l.item[i], &prog_list, db_data_path);
+                }
+            }
+
+            for (int i = 0; i < i1l.length; i++) {
+                addProgById(i1l.item[i], &prog_list, &peer_list, NULL, db_data_path);
+            }
+            unlockMutex(&db_data_mutex);
+        }
+        return;
+    } else if (ACP_CMD_IS(ACP_CMD_PROG_ENABLE)) {
         for (int i = 0; i < i1l.length; i++) {
             Prog *item = getProgById(i1l.item[i], &prog_list);
             if (item != NULL) {
-                deleteProgById(i1l.item[i], &prog_list);
+                if (lockMutex(&item->mutex)) {
+                    if (item->state == OFF) {
+                        item->state = INIT;
+
+                        if (lockMutex(&db_data_mutex)) {
+                            config_saveProgEnable(item->id, 1, NULL, db_data_path);
+                            unlockMutex(&db_data_mutex);
+                        }
+                    }
+                    unlockMutex(&item->mutex);
+                }
             }
         }
+        return;
+    } else if (ACP_CMD_IS(ACP_CMD_PROG_DISABLE)) {
         for (int i = 0; i < i1l.length; i++) {
-            addProgById(i1l.item[i], &prog_list);
+            Prog *item = getProgById(i1l.item[i], &prog_list);
+            if (item != NULL) {
+                if (lockMutex(&item->mutex)) {
+                    if (item->state != OFF) {
+                        item->state = DISABLE;
+
+                        if (lockMutex(&db_data_mutex)) {
+                            config_saveProgEnable(item->id, 0, NULL, db_data_path);
+                            unlockMutex(&db_data_mutex);
+                        }
+                    }
+                    unlockMutex(&item->mutex);
+                }
+            }
         }
         return;
     } else if (ACP_CMD_IS(ACP_CMD_PROG_GET_DATA_INIT)) {
@@ -135,7 +203,7 @@ void serverRun(int *state, int init_state) {
         for (int i = 0; i < i1l.length; i++) {
             Prog *item = getProgById(i1l.item[i], &prog_list);
             if (item != NULL) {
-                if (!bufCatProgInit(item, &response)) {
+                if (!bufCatProgRuntime(item, &response)) {
                     return;
                 }
             }
@@ -169,15 +237,23 @@ void progControl(Prog *item) {
         case WCOPE:
             INTERVAL_CHECK
             if (item->peer.active) {
-                item->tmr_cope.ready = 0;
+                ton_ts_reset(&item->tmr_cope);
                 item->g_count = 0;
                 item->state = WBAD;
             }
             if (ton_ts(item->cope_duration, &item->tmr_cope)) {
+
                 char msg[LINE_SIZE];
                 snprintf(msg, sizeof msg, "check system: %s", item->description);
-                log_saveAlert(msg, item->log_limit, item->db_log_path);
-                callHuman(item, msg, &item->call_peer, item->db_public_path);
+
+                if (lockMutex(&db_data_mutex)) {
+                    log_saveAlert(msg, item->log_limit, db_log_path);
+                    unlockMutex(&db_data_mutex);
+                }
+                if (lockMutex(&db_public_mutex)) {
+                    callHuman(item, "msg", &item->call_peer, db_public_path);
+                    unlockMutex(&db_public_mutex);
+                }
                 item->g_count = 0;
                 item->state = WGOOD;
             }
@@ -201,88 +277,61 @@ void progControl(Prog *item) {
             item->state = INIT;
             break;
     }
-
-
 }
 #undef INTERVAL_CHECK
+
+void cleanup_handler(void *arg) {
+    Prog *item = arg;
+    printf("cleaning up thread %d\n", item->id);
+}
 
 void *threadFunction(void *arg) {
     Prog *item = arg;
 #ifdef MODE_DEBUG
     printf("thread for program with id=%d has been started\n", item->id);
 #endif
-    while (1) {
 #ifdef MODE_DEBUG
-        char *thread_state = getStateStr(item->thread_data.state);
-        printf("thread_%d state:%s\n", item->id, thread_state);
+    pthread_cleanup_push(cleanup_handler, item);
 #endif
+    while (1) {
         struct timespec t1 = getCurrentTime();
-        switch (item->thread_data.state) {
-            case INIT:
-                item->thread_data.state = RUN;
-                break;
-            case RUN:
-            {
-                int old_state;
-                if (threadCancelDisable(&old_state)) {
-                    if (lockMutex(&item->mutex)) {
-                        progControl(item);
-                        unlockMutex(&item->mutex);
-                    }
-                    threadSetCancelState(old_state);
-                }
-                break;
+        int old_state;
+        if (threadCancelDisable(&old_state)) {
+            if (lockMutex(&item->mutex)) {
+                progControl(item);
+                unlockMutex(&item->mutex);
             }
-            case STOP:
-                return EXIT_SUCCESS;
-
-            case FAILURE:
-                break;
+            threadSetCancelState(old_state);
         }
-
-        /*
-                if (tryLockMutex(&item->thread_data.cmd.mutex)) {
-                    if (item->thread_data.cmd.ready) {
-                        switch (item->thread_data.cmd.value) {
-                            case RESET:
-                            case STOP:
-                                item->thread_data.state = STOP;
-                                break;
-                            default:
-                                break;
-                        }
-                        item->thread_data.cmd.ready = 0;
-                    }
-                    unlockMutex(&item->thread_data.cmd.mutex);
-                }
-         */
-        pthread_testcancel();
         sleepRest(item->cycle_duration, t1);
     }
+#ifdef MODE_DEBUG
+    pthread_cleanup_pop(1);
+#endif
 }
 
 void freeData() {
 #ifdef MODE_DEBUG
-
     puts("freeData:");
 #endif
     stopAllProgThreads(&prog_list);
-    FREE_LIST(&i1l);
     freeProgList(&prog_list);
+    FREE_LIST(&peer_list);
+    FREE_LIST(&i1l);
 #ifdef MODE_DEBUG
     puts(" done");
 #endif
 }
 
 void freeApp() {
-
     freeData();
     freeSocketFd(&sock_fd);
     freeMutex(&progl_mutex);
+    freeMutex(&db_data_mutex);
+    freeMutex(&db_public_mutex);
 }
 
 void exit_nicely() {
-
     freeApp();
 #ifdef MODE_DEBUG
     puts("\nBye...");
@@ -291,7 +340,6 @@ void exit_nicely() {
 }
 
 void exit_nicely_e(char *s) {
-
     fprintf(stderr, "%s", s);
     freeApp();
     exit(EXIT_FAILURE);
@@ -307,49 +355,34 @@ int main(int argc, char** argv) {
     }
     int data_initialized = 0;
     while (1) {
+#ifdef MODE_DEBUG
+        printf("main(): %s %d\n", getAppState(app_state), data_initialized);
+#endif
         switch (app_state) {
             case APP_INIT:
-#ifdef MODE_DEBUG
-                puts("MAIN: init");
-#endif
                 initApp();
                 app_state = APP_INIT_DATA;
                 break;
             case APP_INIT_DATA:
-#ifdef MODE_DEBUG
-                puts("MAIN: init data");
-#endif
                 data_initialized = initData();
                 app_state = APP_RUN;
                 delayUsIdle(1000000);
                 break;
             case APP_RUN:
-#ifdef MODE_DEBUG
-                puts("MAIN: run");
-#endif
                 serverRun(&app_state, data_initialized);
                 break;
             case APP_STOP:
-#ifdef MODE_DEBUG
-                puts("MAIN: stop");
-#endif
                 freeData();
                 data_initialized = 0;
                 app_state = APP_RUN;
                 break;
             case APP_RESET:
-#ifdef MODE_DEBUG
-                puts("MAIN: reset");
-#endif
                 freeApp();
                 delayUsIdle(1000000);
                 data_initialized = 0;
                 app_state = APP_INIT;
                 break;
             case APP_EXIT:
-#ifdef MODE_DEBUG
-                puts("MAIN: exit");
-#endif
                 exit_nicely();
                 break;
             default:

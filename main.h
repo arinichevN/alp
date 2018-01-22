@@ -74,10 +74,6 @@ struct prog_st {
     int sock_fd;
     Mutex mutex;
     pthread_t thread;
-    int thread_canceled;
-    Mutex canceled_mutex;
-    Mutex cmd_mutex;
-    int cmd;
     struct prog_st *next;
 };
 typedef struct prog_st Prog;
@@ -93,7 +89,7 @@ DEC_LIST(Phone)
 
 typedef struct {
     ProgList *prog_list;
-   PeerList *peer_list;
+    PeerList *peer_list;
     Prog * prog;
     sqlite3 *db_data;
 } ProgData;

@@ -6,8 +6,6 @@ char db_data_path[LINE_SIZE];
 char db_log_path[LINE_SIZE];
 char db_public_path[LINE_SIZE];
 
-char call_peer_id[NAME_SIZE];
-
 int sock_port = -1;
 int sock_fd = -1;
 int log_limit = 0;
@@ -61,10 +59,8 @@ int readSettings() {
 
 int initData() {
     if (!initI1List(&i1l, ACP_BUFFER_MAX_SIZE)) {
-        freeProgList(&prog_list);
         return 0;
     }
-
     if (!config_getPeerList(&peer_list, NULL, db_public_path)) {
         FREE_LIST(&i1l);
         return 0;
@@ -251,7 +247,7 @@ void progControl(Prog *item) {
                     unlockMutex(&db_data_mutex);
                 }
                 if (lockMutex(&db_public_mutex)) {
-                    callHuman(item, "msg", &item->call_peer, db_public_path);
+                    callHuman(item, msg, &item->call_peer, db_public_path);
                     unlockMutex(&db_public_mutex);
                 }
                 item->g_count = 0;
@@ -311,16 +307,10 @@ void *threadFunction(void *arg) {
 }
 
 void freeData() {
-#ifdef MODE_DEBUG
-    puts("freeData:");
-#endif
     stopAllProgThreads(&prog_list);
     freeProgList(&prog_list);
     FREE_LIST(&peer_list);
     FREE_LIST(&i1l);
-#ifdef MODE_DEBUG
-    puts(" done");
-#endif
 }
 
 void freeApp() {

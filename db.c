@@ -78,14 +78,6 @@ int addProgById(int prog_id, ProgList *list, PeerList *peer_list, sqlite3 *db_da
         free(item);
         return 0;
     }
-    if (!initMutex(&item->canceled_mutex)) {
-        free(item);
-        return 0;
-    }
-    if (!initMutex(&item->cmd_mutex)) {
-        free(item);
-        return 0;
-    }
     if (!initClient(&item->sock_fd, WAIT_RESP_TIMEOUT)) {
         freeMutex(&item->mutex);
         free(item);
@@ -99,8 +91,6 @@ int addProgById(int prog_id, ProgList *list, PeerList *peer_list, sqlite3 *db_da
     }
     item->peer.fd = &item->sock_fd;
     item->call_peer.fd = &item->sock_fd;
-    item->thread_canceled = 0;
-    item->cmd = OFF;
     if (!checkProg(item)) {
         freeSocketFd(&item->sock_fd);
         freeMutex(&item->mutex);
@@ -199,14 +189,13 @@ int callHuman(Prog *item, char *message, Peer *peer, const char *db_path) {
 #endif
         return 0;
     }
-    for (int i = 0; i < pn_list.length; i++) {
-        if (item->sms) {
+    if (item->sms) {
+        for (int i = 0; i < pn_list.length; i++) {
             acp_sendSMS(peer, &pn_list.item[LINE_SIZE * i], message);
         }
-        break;
     }
-    for (int i = 0; i < pn_list.length; i++) {
-        if (item->ring) {
+    if (item->ring) {
+        for (int i = 0; i < pn_list.length; i++) {
             acp_makeCall(peer, &pn_list.item[LINE_SIZE * i]);
         }
     }
@@ -218,44 +207,63 @@ int getProg_callback(void *d, int argc, char **argv, char **azColName) {
     ProgData * data = d;
     Prog *item = data->prog;
     int load = 0, enable = 0;
+    int c = 0;
     for (int i = 0; i < argc; i++) {
         if (DB_COLUMN_IS("id")) {
             item->id = atoi(argv[i]);
+            c++;
         } else if (DB_COLUMN_IS("peer_id")) {
             Peer *peer = getPeerById(argv[i], data->peer_list);
             if (peer == NULL) {
+                fprintf(stderr, "getProg_callback(): peer %s not found\n", argv[i]);
                 return EXIT_FAILURE;
             }
             item->peer = *peer;
+            c++;
         } else if (DB_COLUMN_IS("call_peer_id")) {
             Peer *peer = getPeerById(argv[i], data->peer_list);
             if (peer == NULL) {
+                fprintf(stderr, "getProg_callback(): peer %s not found\n", argv[i]);
                 return EXIT_FAILURE;
             }
             item->call_peer = *peer;
+            c++;
         } else if (DB_COLUMN_IS("description")) {
             memcpy(item->description, argv[i], sizeof item->description);
+            c++;
         } else if (DB_COLUMN_IS("check_interval")) {
             item->check_interval.tv_nsec = 0;
             item->check_interval.tv_sec = atoi(argv[i]);
+            c++;
         } else if (DB_COLUMN_IS("cope_duration")) {
             item->cope_duration.tv_nsec = 0;
             item->cope_duration.tv_sec = atoi(argv[i]);
+            c++;
         } else if (DB_COLUMN_IS("phone_number_group_id")) {
             item->phone_number_group_id = atoi(argv[i]);
+            c++;
         } else if (DB_COLUMN_IS("sms")) {
             item->sms = atoi(argv[i]);
+            c++;
         } else if (DB_COLUMN_IS("ring")) {
             item->ring = atoi(argv[i]);
+            c++;
         } else if (DB_COLUMN_IS("enable")) {
             enable = atoi(argv[i]);
+            c++;
         } else if (DB_COLUMN_IS("load")) {
             load = atoi(argv[i]);
+            c++;
         } else {
-            fputs("loadProg_callback: unknown column\n", stderr);
+            fputs("getProg_callback: unknown column\n", stderr);
         }
     }
-
+#define N 11
+    if (c != N) {
+        fprintf(stderr, "getProg_callback(): required %d columns but %d found\n", N, c);
+        return EXIT_FAILURE;
+    }
+#undef N
     if (enable) {
         item->state = INIT;
     } else {

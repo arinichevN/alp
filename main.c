@@ -159,7 +159,7 @@ void serverRun(int *state, int init_state) {
                         item->state = INIT;
 
                         if (lockMutex(&db_data_mutex)) {
-                            config_saveProgEnable(item->id, 1, NULL, db_data_path);
+                            db_saveTableFieldInt("prog","enable",item->id, 1, NULL, db_data_path);
                             unlockMutex(&db_data_mutex);
                         }
                     }
@@ -177,7 +177,7 @@ void serverRun(int *state, int init_state) {
                         item->state = DISABLE;
 
                         if (lockMutex(&db_data_mutex)) {
-                            config_saveProgEnable(item->id, 0, NULL, db_data_path);
+                            db_saveTableFieldInt("prog", "enable", item->id, 0, NULL, db_data_path);
                             unlockMutex(&db_data_mutex);
                         }
                     }

@@ -7,7 +7,7 @@ CONF_DIR=/etc/controller
 CONF_DIR_APP=$CONF_DIR/$APP
 
 #DEBUG_PARAM="-Wall -pedantic"
-DEBUG_PARAM="-Wall"
+DEBUG_PARAM="-Wall -g"
 MODE_DEBUG=-DMODE_DEBUG
 MODE_FULL=-DMODE_FULL
 
@@ -60,7 +60,7 @@ function build_lib {
 	gcc $1 $PLATFORM -c configl.c -D_REENTRANT -DSQLITE_THREADSAFE=2 -DSQLITE_OMIT_LOAD_EXTENSION $DEBUG_PARAM -lsqlite3 -lpthread && \
 	gcc $1 $PLATFORM -c logl.c  -D_REENTRANT -DSQLITE_THREADSAFE=2 -DSQLITE_OMIT_LOAD_EXTENSION $DEBUG_PARAM -lsqlite3 -lpthread && \
 	cd acp && \
-	gcc $PLATFORM -c main.c -D_REENTRANT $DEBUG_PARAM -lpthread && \
+	gcc $1 $PLATFORM -c main.c -D_REENTRANT $DEBUG_PARAM -lpthread && \
 	gcc $1 $PLATFORM -c mobile.c -D_REENTRANT $DEBUG_PARAM -lpthread && \
 	cd ../ && \
 	echo "library: making archive..." && \
@@ -75,7 +75,7 @@ function build {
 	cd lib && \
 	build_lib $1 && \
 	cd ../ 
-	gcc -D_REENTRANT -DSQLITE_THREADSAFE=2 -DSQLITE_OMIT_LOAD_EXTENSION $1 $3 $PLATFORM $INI_MODE main.c -o $2 $DEBUG_PARAM -lpthread -lsqlite3 -L./lib -lpac && echo "Application successfully compiled. Launch command: sudo ./"$2
+	gcc  -D_REENTRANT -DSQLITE_THREADSAFE=2 -DSQLITE_OMIT_LOAD_EXTENSION $1 $3 $PLATFORM $INI_MODE main.c -o $2 $DEBUG_PARAM -lpthread -lsqlite3 -L./lib -lpac && echo "Application successfully compiled. Launch command: sudo ./"$2
 }
 
 function full {

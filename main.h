@@ -61,7 +61,7 @@ struct prog_st {
     int phone_number_group_id;
     struct timespec check_interval;
     struct timespec cope_duration;
-    char description[LINE_SIZE];
+    char *description;
     int ring;
     int sms;
     int g_count;

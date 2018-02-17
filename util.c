@@ -63,6 +63,7 @@ void stopAllProgThreads(ProgList * list) {
 void freeProg(Prog * item) {
     freeSocketFd(&item->sock_fd);
     freeMutex(&item->mutex);
+    free(item->description);
     free(item);
 }
 
@@ -209,8 +210,11 @@ void printData(ACPResponse * response) {
     SEND_STR(q)
     snprintf(q, sizeof q, "PID: %d\n", getpid());
     SEND_STR(q)
+    snprintf(q, sizeof q, "sizeof prog: %u\n", sizeof (Prog));
+    SEND_STR(q)
     snprintf(q, sizeof q, "prog_list length: %d\n", prog_list.length);
     SEND_STR(q)
+               acp_sendPeerListInfo(&peer_list, response, &peer_client);
     SEND_STR("+--------------------------------------------------------------------------------+\n");
     SEND_STR("|                                  Program                                       |\n");
     SEND_STR("+-----------+--------------------------------+-----------+-----------+-----------+\n");

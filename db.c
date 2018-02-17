@@ -20,7 +20,7 @@ int addProg(Prog *item, ProgList *list) {
     list->last = item;
     list->length++;
 #ifdef MODE_DEBUG
-    printf("addProg: prog with id=%d loaded\n", item->id);
+    printf("%s(): prog with id=%d loaded\n", F,item->id);
 #endif
     return 1;
 }
@@ -29,14 +29,14 @@ int addProgById(int prog_id, ProgList *list, PeerList *peer_list, sqlite3 *db_da
     Prog *rprog = getProgById(prog_id, list);
     if (rprog != NULL) {//program is already running
 #ifdef MODE_DEBUG
-        fprintf(stderr, "addProgById(): program with id = %d is being controlled by program\n", rprog->id);
+        fprintf(stderr, "%s(): program with id = %d is being controlled by program\n",F, rprog->id);
 #endif
         return 0;
     }
 
     Prog *item = malloc(sizeof *(item));
     if (item == NULL) {
-        fputs("addProgById(): failed to allocate memory\n", stderr);
+        fprintf(stderr, "%s(): failed to allocate memory\n", F);
         return 0;
     }
     memset(item, 0, sizeof *item);
@@ -126,10 +126,10 @@ int loadActiveProg_callback(void *d, int argc, char **argv, char **azColName) {
     ProgData *data = d;
     for (int i = 0; i < argc; i++) {
         if (DB_COLUMN_IS("id")) {
-            int id = atoi(argv[i]);
-            addProgById(id, data->prog_list, data->peer_list, data->db_data, NULL);
+            int id = atoi(DB_COLUMN_VALUE);
+            addProgById(id, data->prog_list,data->peer_list,  data->db_data, NULL);
         } else {
-            fputs("loadActiveProg_callback(): unknown column\n", stderr);
+            fprintf(stderr,"%s(): unknown column: %s\n", F, DB_COLUMN_NAME);
         }
     }
     return EXIT_SUCCESS;
@@ -144,7 +144,7 @@ int loadActiveProg(ProgList *list, PeerList *peer_list, char *db_path) {
     char *q = "select id from prog where load=1";
     if (!db_exec(db, q, loadActiveProg_callback, &data)) {
 #ifdef MODE_DEBUG
-        fprintf(stderr, "loadActiveProg(): query failed: %s\n", q);
+        fprintf(stderr, "%s(): query failed: %s\n",F, q);
 #endif
         sqlite3_close(db);
         return 0;
@@ -182,57 +182,62 @@ int getProg_callback(void *d, int argc, char **argv, char **azColName) {
     int c = 0;
     for (int i = 0; i < argc; i++) {
         if (DB_COLUMN_IS("id")) {
-            item->id = atoi(argv[i]);
+            item->id = atoi(DB_COLUMN_VALUE);
             c++;
         } else if (DB_COLUMN_IS("peer_id")) {
-            Peer *peer = getPeerById(argv[i], data->peer_list);
+            Peer *peer = getPeerById(DB_COLUMN_VALUE, data->peer_list);
             if (peer == NULL) {
-                fprintf(stderr, "getProg_callback(): peer %s not found\n", argv[i]);
+                fprintf(stderr, "%s(): peer %s not found\n", F,DB_COLUMN_VALUE);
                 return EXIT_FAILURE;
             }
             item->peer = *peer;
             c++;
         } else if (DB_COLUMN_IS("call_peer_id")) {
-            Peer *peer = getPeerById(argv[i], data->peer_list);
+            Peer *peer = getPeerById(DB_COLUMN_VALUE, data->peer_list);
             if (peer == NULL) {
-                fprintf(stderr, "getProg_callback(): peer %s not found\n", argv[i]);
+                fprintf(stderr, "%s(): peer %s not found\n",F, DB_COLUMN_VALUE);
                 return EXIT_FAILURE;
             }
             item->call_peer = *peer;
             c++;
         } else if (DB_COLUMN_IS("description")) {
-            memcpy(item->description, argv[i], sizeof item->description);
+           strcpyma(&item->description,DB_COLUMN_VALUE);
+            if (item->description == NULL) {
+                fprintf(stderr, "%s(): failed to allocate memory for description\n", F);
+                return EXIT_FAILURE;
+            }
             c++;
         } else if (DB_COLUMN_IS("check_interval")) {
             item->check_interval.tv_nsec = 0;
-            item->check_interval.tv_sec = atoi(argv[i]);
+            item->check_interval.tv_sec = atoi(DB_COLUMN_VALUE);
             c++;
         } else if (DB_COLUMN_IS("cope_duration")) {
             item->cope_duration.tv_nsec = 0;
-            item->cope_duration.tv_sec = atoi(argv[i]);
+            item->cope_duration.tv_sec = atoi(DB_COLUMN_VALUE);
             c++;
         } else if (DB_COLUMN_IS("phone_number_group_id")) {
-            item->phone_number_group_id = atoi(argv[i]);
+            item->phone_number_group_id = atoi(DB_COLUMN_VALUE);
             c++;
         } else if (DB_COLUMN_IS("sms")) {
-            item->sms = atoi(argv[i]);
+            item->sms = atoi(DB_COLUMN_VALUE);
             c++;
         } else if (DB_COLUMN_IS("ring")) {
-            item->ring = atoi(argv[i]);
+            item->ring = atoi(DB_COLUMN_VALUE);
             c++;
         } else if (DB_COLUMN_IS("enable")) {
-            enable = atoi(argv[i]);
+            enable = atoi(DB_COLUMN_VALUE);
             c++;
         } else if (DB_COLUMN_IS("load")) {
-            load = atoi(argv[i]);
+            load = atoi(DB_COLUMN_VALUE);
             c++;
         } else {
-            fputs("getProg_callback: unknown column\n", stderr);
+            fprintf(stderr,"%s(): unknown column: %s\n", F,DB_COLUMN_NAME);
+            c++;
         }
     }
 #define N 11
     if (c != N) {
-        fprintf(stderr, "getProg_callback(): required %d columns but %d found\n", N, c);
+        fprintf(stderr, "%s(): required %d columns but %d found\n", F,N, c);
         return EXIT_FAILURE;
     }
 #undef N

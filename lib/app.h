@@ -3,6 +3,7 @@
 #define LIBPAS_APP_H
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdarg.h>
 #include <limits.h>
 #include <string.h>
@@ -19,8 +20,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
-#include "main.h"
 
+#include "common.h"
 #include "acp/app.h"
 
 #define STRINGIFY(x) #x
@@ -67,6 +68,8 @@
         return;\
     }\
     if (!init_state) {return;}
+
+#define DEF_SERVER_I1LIST I1 i1_arr[request.data_rows_count];I1List i1l;i1l.item=i1_arr;i1l.max_length=request.data_rows_count;i1l.length=0;
 
 #define SEND_STR(V) acp_responseSendStr(V, ACP_MIDDLE_PACK, response, &peer_client);
 #define SEND_STR_L(V) acp_responseSendStr(V, ACP_LAST_PACK, response, &peer_client);
@@ -145,6 +148,10 @@ typedef struct {
 //#define IF_LOCK_MUTEX(P) if(pthread_mutex_lock(P) != 0)
 //#define IF_TRYLOCK_MUTEX(P) if(pthread_mutex_trylock(P) != 0)
 //#define UNLOCK_MUTEX(P) pthread_mutex_unlock(P)
+
+
+extern char * strcpyma(char **dest, char *src);
+
 extern void putse(const char *str);
 
 extern void printfe(const char *str, ...);
@@ -184,6 +191,7 @@ extern int createMThread(pthread_t *new_thread, void *(*thread_routine) (void *)
 extern int threadCancelDisable(int *old_state) ;
 
 extern int threadSetCancelState(int state);
+
 
 #endif 
 

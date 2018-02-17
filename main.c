@@ -2,16 +2,15 @@
 
 int app_state = APP_INIT;
 
-char db_data_path[LINE_SIZE];
-char db_log_path[LINE_SIZE];
-char db_public_path[LINE_SIZE];
+char * db_data_path;
+char * db_log_path;
+char * db_public_path;
 
 int sock_port = -1;
 int sock_fd = -1;
 int log_limit = 0;
 Peer peer_client = {.fd = &sock_fd, .addr_size = sizeof peer_client.addr};
 struct timespec cycle_duration = {0, 0};
-I1List i1l;
 Mutex progl_mutex = MUTEX_INITIALIZER;
 Mutex db_data_mutex = MUTEX_INITIALIZER;
 Mutex db_public_mutex = MUTEX_INITIALIZER;
@@ -33,14 +32,17 @@ int readSettings() {
     char s[LINE_SIZE];
     fgets(s, LINE_SIZE, stream);
     int n;
+    char db_data_path_temp[LINE_SIZE];
+    char db_log_path_temp[LINE_SIZE];
+    char db_public_path_temp[LINE_SIZE];
     n = fscanf(stream, "%d\t%ld\t%ld\t%d\t%255s\t%255s\t%255s\n",
             &sock_port,
             &cycle_duration.tv_sec,
             &cycle_duration.tv_nsec,
             &log_limit,
-            db_data_path,
-            db_public_path,
-            db_log_path
+            db_data_path_temp,
+            db_public_path_temp,
+            db_log_path_temp
 
             );
     if (n != 7) {
@@ -51,6 +53,27 @@ int readSettings() {
         return 0;
     }
     fclose(stream);
+   strcpyma(&db_data_path, db_data_path_temp);
+    if (db_data_path == NULL) {
+#ifdef MODE_DEBUG
+        fprintf(stderr, "%s(): failed to allocate memory for db_data_path\n", F);
+#endif
+        return 0;
+    }
+    strcpyma(&db_public_path, db_public_path_temp);
+    if (db_public_path == NULL) {
+#ifdef MODE_DEBUG
+        fprintf(stderr, "%s(): failed to allocate memory for db_public_path\n", F);
+#endif
+        return 0;
+    }
+   strcpyma(&db_log_path, db_log_path_temp);
+    if (db_log_path == NULL) {
+#ifdef MODE_DEBUG
+        fprintf(stderr, "%s(): failed to allocate memory for db_log_path\n", F);
+#endif
+        return 0;
+    }
 #ifdef MODE_DEBUG
     printf("readSettings: \n\tsock_port: %d, \n\tcycle_duration: %ld sec %ld nsec, \n\tlog_limit: %d, \n\tdb_data_path: %s, \n\tdb_public_path: %s, \n\tdb_log_path: %s\n", sock_port, cycle_duration.tv_sec, cycle_duration.tv_nsec, log_limit, db_data_path, db_public_path, db_log_path);
 #endif
@@ -58,17 +81,12 @@ int readSettings() {
 }
 
 int initData() {
-    if (!initI1List(&i1l, ACP_BUFFER_MAX_SIZE)) {
-        return 0;
-    }
     if (!config_getPeerList(&peer_list, NULL, db_public_path)) {
-        FREE_LIST(&i1l);
         return 0;
     }
     if (!loadActiveProg(&prog_list, &peer_list, db_data_path)) {
         freeProgList(&prog_list);
-        FREE_LIST(&peer_list);
-        FREE_LIST(&i1l);
+        freePeerList(&peer_list);
         return 0;
     }
     return 1;
@@ -95,7 +113,7 @@ void initApp() {
 void serverRun(int *state, int init_state) {
     SERVER_HEADER
     SERVER_APP_ACTIONS
-
+DEF_SERVER_I1LIST
     if (
             ACP_CMD_IS(ACP_CMD_PROG_STOP) ||
             ACP_CMD_IS(ACP_CMD_PROG_START) ||
@@ -119,7 +137,7 @@ void serverRun(int *state, int init_state) {
             for (int i = 0; i < i1l.length; i++) {
                 Prog *item = getProgById(i1l.item[i], &prog_list);
                 if (item != NULL) {
-                    deleteProgById(i1l.item[i], &prog_list, db_data_path);
+                    deleteProgById(i1l.item[i], &prog_list,  db_data_path);
                 }
             }
             unlockMutex(&db_data_mutex);
@@ -129,7 +147,7 @@ void serverRun(int *state, int init_state) {
 
         if (lockMutex(&db_data_mutex)) {
             for (int i = 0; i < i1l.length; i++) {
-                addProgById(i1l.item[i], &prog_list, &peer_list, NULL, db_data_path);
+                addProgById(i1l.item[i], &prog_list, &peer_list,  NULL, db_data_path);
             }
             unlockMutex(&db_data_mutex);
         }
@@ -140,12 +158,12 @@ void serverRun(int *state, int init_state) {
             for (int i = 0; i < i1l.length; i++) {
                 Prog *item = getProgById(i1l.item[i], &prog_list);
                 if (item != NULL) {
-                    deleteProgById(i1l.item[i], &prog_list, db_data_path);
+                    deleteProgById(i1l.item[i], &prog_list,  db_data_path);
                 }
             }
 
             for (int i = 0; i < i1l.length; i++) {
-                addProgById(i1l.item[i], &prog_list, &peer_list, NULL, db_data_path);
+                addProgById(i1l.item[i], &prog_list, &peer_list,  NULL, db_data_path);
             }
             unlockMutex(&db_data_mutex);
         }
@@ -159,7 +177,7 @@ void serverRun(int *state, int init_state) {
                         item->state = INIT;
 
                         if (lockMutex(&db_data_mutex)) {
-                            db_saveTableFieldInt("prog","enable",item->id, 1, NULL, db_data_path);
+                            db_saveTableFieldInt("prog", "enable", item->id, 1, NULL, db_data_path);
                             unlockMutex(&db_data_mutex);
                         }
                     }
@@ -309,8 +327,7 @@ void *threadFunction(void *arg) {
 void freeData() {
     stopAllProgThreads(&prog_list);
     freeProgList(&prog_list);
-    FREE_LIST(&peer_list);
-    FREE_LIST(&i1l);
+    freePeerList(&peer_list);
 }
 
 void freeApp() {
@@ -319,6 +336,9 @@ void freeApp() {
     freeMutex(&progl_mutex);
     freeMutex(&db_data_mutex);
     freeMutex(&db_public_mutex);
+    free(db_data_path);
+    free(db_log_path);
+    free(db_public_path);
 }
 
 void exit_nicely() {

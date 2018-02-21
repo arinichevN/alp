@@ -66,18 +66,21 @@ int addProgById(int prog_id, ProgList *list, PeerList *peer_list, sqlite3 *db_da
     if (!checkProg(item)) {
         freeSocketFd(&item->sock_fd);
         freeMutex(&item->mutex);
+        free(item->description);
         free(item);
         return 0;
     }
     if (!addProg(item, list)) {
         freeSocketFd(&item->sock_fd);
         freeMutex(&item->mutex);
+        free(item->description);
         free(item);
         return 0;
     }
     if (!createMThread(&item->thread, &threadFunction, item)) {
         freeSocketFd(&item->sock_fd);
         freeMutex(&item->mutex);
+        free(item->description);
         free(item);
         return 0;
     }

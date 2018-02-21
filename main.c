@@ -48,12 +48,12 @@ int readSettings() {
     if (n != 7) {
         fclose(stream);
 #ifdef MODE_DEBUG
-        fputs("ERROR: readSettings: bad row format\n", stderr);
+        fprintf(stderr, "%s(): bad row format\n", F);
 #endif
         return 0;
     }
     fclose(stream);
-   strcpyma(&db_data_path, db_data_path_temp);
+    strcpyma(&db_data_path, db_data_path_temp);
     if (db_data_path == NULL) {
 #ifdef MODE_DEBUG
         fprintf(stderr, "%s(): failed to allocate memory for db_data_path\n", F);
@@ -67,7 +67,7 @@ int readSettings() {
 #endif
         return 0;
     }
-   strcpyma(&db_log_path, db_log_path_temp);
+    strcpyma(&db_log_path, db_log_path_temp);
     if (db_log_path == NULL) {
 #ifdef MODE_DEBUG
         fprintf(stderr, "%s(): failed to allocate memory for db_log_path\n", F);
@@ -75,7 +75,7 @@ int readSettings() {
         return 0;
     }
 #ifdef MODE_DEBUG
-    printf("readSettings: \n\tsock_port: %d, \n\tcycle_duration: %ld sec %ld nsec, \n\tlog_limit: %d, \n\tdb_data_path: %s, \n\tdb_public_path: %s, \n\tdb_log_path: %s\n", sock_port, cycle_duration.tv_sec, cycle_duration.tv_nsec, log_limit, db_data_path, db_public_path, db_log_path);
+    printf("%s(): \n\tsock_port: %d, \n\tcycle_duration: %ld sec %ld nsec, \n\tlog_limit: %d, \n\tdb_data_path: %s, \n\tdb_public_path: %s, \n\tdb_log_path: %s\n", F, sock_port, cycle_duration.tv_sec, cycle_duration.tv_nsec, log_limit, db_data_path, db_public_path, db_log_path);
 #endif
     return 1;
 }
@@ -113,7 +113,7 @@ void initApp() {
 void serverRun(int *state, int init_state) {
     SERVER_HEADER
     SERVER_APP_ACTIONS
-DEF_SERVER_I1LIST
+    DEF_SERVER_I1LIST
     if (
             ACP_CMD_IS(ACP_CMD_PROG_STOP) ||
             ACP_CMD_IS(ACP_CMD_PROG_START) ||
@@ -137,7 +137,7 @@ DEF_SERVER_I1LIST
             for (int i = 0; i < i1l.length; i++) {
                 Prog *item = getProgById(i1l.item[i], &prog_list);
                 if (item != NULL) {
-                    deleteProgById(i1l.item[i], &prog_list,  db_data_path);
+                    deleteProgById(i1l.item[i], &prog_list, db_data_path);
                 }
             }
             unlockMutex(&db_data_mutex);
@@ -147,7 +147,7 @@ DEF_SERVER_I1LIST
 
         if (lockMutex(&db_data_mutex)) {
             for (int i = 0; i < i1l.length; i++) {
-                addProgById(i1l.item[i], &prog_list, &peer_list,  NULL, db_data_path);
+                addProgById(i1l.item[i], &prog_list, &peer_list, NULL, db_data_path);
             }
             unlockMutex(&db_data_mutex);
         }
@@ -158,12 +158,12 @@ DEF_SERVER_I1LIST
             for (int i = 0; i < i1l.length; i++) {
                 Prog *item = getProgById(i1l.item[i], &prog_list);
                 if (item != NULL) {
-                    deleteProgById(i1l.item[i], &prog_list,  db_data_path);
+                    deleteProgById(i1l.item[i], &prog_list, db_data_path);
                 }
             }
 
             for (int i = 0; i < i1l.length; i++) {
-                addProgById(i1l.item[i], &prog_list, &peer_list,  NULL, db_data_path);
+                addProgById(i1l.item[i], &prog_list, &peer_list, NULL, db_data_path);
             }
             unlockMutex(&db_data_mutex);
         }

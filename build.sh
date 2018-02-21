@@ -1,6 +1,6 @@
 #!/bin/bash
 
-APP=alp
+APP=chp
 APP_DBG=`printf "%s_dbg" "$APP"`
 INST_DIR=/usr/sbin
 CONF_DIR=/etc/controller

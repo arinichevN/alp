@@ -1,6 +1,6 @@
 
-#ifndef ALP_H
-#define ALP_H
+#ifndef CHP_H
+#define CHP_H
 
 
 #include "lib/util.h"
@@ -19,7 +19,7 @@
 
 
 
-#define APP_NAME alp
+#define APP_NAME chp
 #define APP_NAME_STR TOSTRING(APP_NAME)
 
 

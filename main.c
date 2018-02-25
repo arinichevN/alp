@@ -288,7 +288,10 @@ void progControl(Prog *item) {
         case OFF:
             break;
         default:
-            item->state = INIT;
+           #ifdef MODE_DEBUG
+            fprintf(stderr, "%s(): unknown state, switched to OFF where prog_id=%d\n", F, item->id);
+#endif
+            item->state = OFF;
             break;
     }
 }

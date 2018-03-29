@@ -11,11 +11,11 @@
 #include "lib/configl.h"
 #include "lib/logl.h"
 #include "lib/dbl.h"
+#include "lib/tsv.h"
 #include "lib/acp/main.h"
 #include "lib/acp/app.h"
 #include "lib/acp/prog.h"
 #include "lib/acp/mobile.h"
-#include "lib/acp/alp.h"
 
 
 
@@ -34,9 +34,6 @@
 
 #define WAIT_RESP_TIMEOUT 3
 #define GOOD_COUNT 7
-
-
-#define PROG_FIELDS "id,description,peer_id,call_peer_id,check_interval,cope_duration,phone_number_group_id,sms,ring,enable,load"
 
 #define PROG_LIST_LOOP_ST {Prog *item = prog_list.top; while (item != NULL) {
 #define PROG_LIST_LOOP_SP item = item->next; } item = prog_list.top;}
@@ -57,20 +54,15 @@ enum {
 struct prog_st {
     int id;
     Peer peer;
-    Peer call_peer;
-    int phone_number_group_id;
+    EM em;
     struct timespec check_interval;
     struct timespec cope_duration;
-    char *description;
-    int ring;
-    int sms;
     int g_count;
     char state;
     Ton_ts tmr_check;
     Ton_ts tmr_cope;
     
     struct timespec cycle_duration;
-    int log_limit;
     int sock_fd;
     Mutex mutex;
     pthread_t thread;
@@ -93,8 +85,6 @@ typedef struct {
     Prog * prog;
     sqlite3 *db_data;
 } ProgData;
-
-extern int readSettings();
 
 extern int initData();
 

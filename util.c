@@ -63,7 +63,6 @@ void stopAllProgThreads(ProgList * list) {
 void freeProg(Prog * item) {
     freeSocketFd(&item->sock_fd);
     freeMutex(&item->mutex);
-    free(item->description);
     free(item);
 }
 
@@ -110,12 +109,20 @@ int unlockProgList() {
 }
 
 int checkProg(const Prog * item) {
+    if (item->peer.fd == NULL) {
+        fprintf(stderr, "%s(): bad peer where prog id = %d\n", F, item->id);
+        return 0;
+    }
+    if (item->em.peer.fd == NULL) {
+        fprintf(stderr, "%s(): bad em where prog id = %d\n", F, item->id);
+        return 0;
+    }
     if (item->check_interval.tv_sec <= 0 && item->check_interval.tv_nsec <= 0) {
-        fprintf(stderr, "checkProg: bad check_interval where prog id = %d\n", item->id);
+        fprintf(stderr, "%s(): bad check_interval where prog id = %d\n",F, item->id);
         return 0;
     }
     if (item->cope_duration.tv_sec < 0 && item->cope_duration.tv_nsec < 0) {
-        fprintf(stderr, "checkProg: bad cope_duration where prog id = %d\n", item->id);
+        fprintf(stderr, "%s(): bad cope_duration where prog id = %d\n",F, item->id);
         return 0;
     }
 
@@ -175,12 +182,10 @@ int bufCatProgRuntime(Prog *item, ACPResponse * response) {
 int bufCatProgInit(Prog *item, ACPResponse * response) {
     if (lockMutex(&item->mutex)) {
         char q[LINE_SIZE];
-        snprintf(q, sizeof q, "%d" ACP_DELIMITER_COLUMN_STR "%ld" ACP_DELIMITER_COLUMN_STR "%ld" ACP_DELIMITER_COLUMN_STR "%s" ACP_DELIMITER_COLUMN_STR "%d" ACP_DELIMITER_ROW_STR,
+        snprintf(q, sizeof q, "%d" ACP_DELIMITER_COLUMN_STR "%ld" ACP_DELIMITER_COLUMN_STR "%ld" ACP_DELIMITER_ROW_STR,
                 item->id,
                 item->check_interval.tv_sec,
-                item->cope_duration.tv_sec,
-                item->call_peer.id,
-                item->phone_number_group_id
+                item->cope_duration.tv_sec
                 );
         unlockMutex(&item->mutex);
         return acp_responseStrCat(response, q);
@@ -198,13 +203,7 @@ void printData(ACPResponse * response) {
     SEND_STR(q)
     snprintf(q, sizeof q, "cycle_duration nsec: %ld\n", cycle_duration.tv_nsec);
     SEND_STR(q)
-    snprintf(q, sizeof q, "log_limit: %d\n", log_limit);
-    SEND_STR(q)
     snprintf(q, sizeof q, "db_data_path: %s\n", db_data_path);
-    SEND_STR(q)
-    snprintf(q, sizeof q, "db_public_path: %s\n", db_public_path);
-    SEND_STR(q)
-    snprintf(q, sizeof q, "db_log_path: %s\n", db_log_path);
     SEND_STR(q)
     snprintf(q, sizeof q, "app_state: %s\n", getAppState(app_state));
     SEND_STR(q)
@@ -214,23 +213,24 @@ void printData(ACPResponse * response) {
     SEND_STR(q)
     snprintf(q, sizeof q, "prog_list length: %d\n", prog_list.length);
     SEND_STR(q)
-               acp_sendPeerListInfo(&peer_list, response, &peer_client);
-    SEND_STR("+--------------------------------------------------------------------------------+\n");
-    SEND_STR("|                                  Program                                       |\n");
-    SEND_STR("+-----------+--------------------------------+-----------+-----------+-----------+\n");
-    SEND_STR("|    id     |           description          |check_int_s|cope_dur_s |phone_group|\n");
-    SEND_STR("+-----------+--------------------------------+-----------+-----------+-----------+\n");
+    acp_sendPeerListInfo(&peer_list, response, &peer_client);
+    SEND_STR("+-----------------------------------------------------------------------+\n");
+    SEND_STR("|                                Program                                |\n");
+    SEND_STR("+-----------+-----------+-----------+-----------+-----------+-----------+\n");
+    SEND_STR("|    id     |  peer_id  |em_peer_id |  em_rid   |check_int_s|cope_dur_s |\n");
+    SEND_STR("+-----------+-----------+-----------+-----------+-----------+-----------+\n");
     PROG_LIST_LOOP_ST
-    snprintf(q, sizeof q, "|%11d|%32.32s|%11ld|%11ld|%11d|\n",
+    snprintf(q, sizeof q, "|%11d|%11s|%11s|%11d|%11ld|%11ld|\n",
             item->id,
-            item->description,
+            item->peer.id,
+            item->em.peer.id,
+            item->em.remote_id,
             item->check_interval.tv_sec,
-            item->cope_duration.tv_sec,
-            item->phone_number_group_id
+            item->cope_duration.tv_sec
             );
     SEND_STR(q);
     PROG_LIST_LOOP_SP
-    SEND_STR("+-----------+--------------------------------+-----------+-----------+-----------+\n");
+    SEND_STR("+-----------+-----------+-----------+-----------+-----------+-----------+\n");
 
     SEND_STR("+-----------------------------------------------+\n")
     SEND_STR("|                   Program runtime             |\n")
@@ -281,8 +281,8 @@ void printHelp(ACPResponse * response) {
     SEND_STR(q)
     snprintf(q, sizeof q, "%s\tdisable running program; program id expected\n", ACP_CMD_PROG_DISABLE);
     SEND_STR(q)
-    snprintf(q, sizeof q, "%s\tget prog runtime data in format:  progId_state_stateEM_output_timeRestSecToEMSwap; program id expected\n", ACP_CMD_PROG_GET_DATA_RUNTIME);
+    snprintf(q, sizeof q, "%s\tget prog runtime data; program id expected\n", ACP_CMD_PROG_GET_DATA_RUNTIME);
     SEND_STR(q)
-    snprintf(q, sizeof q, "%s\tget prog initial data in format;  progId_setPoint_mode_ONFdelta_PIDheaterKp_PIDheaterKi_PIDheaterKd_PIDcoolerKp_PIDcoolerKi_PIDcoolerKd; program id expected\n", ACP_CMD_PROG_GET_DATA_INIT);
+    snprintf(q, sizeof q, "%s\tget prog initial data; program id expected\n", ACP_CMD_PROG_GET_DATA_INIT);
     SEND_STR_L(q)
 }

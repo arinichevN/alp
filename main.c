@@ -199,14 +199,14 @@ void progControl(Prog *item) {
             item->state = WBAD;
             break;
         case WBAD:
-            acp_setEMDutyCycleR(&item->em, GOOD_FLOAT);
+            acp_setEMFloat(&item->em, GOOD_FLOAT);
             INTERVAL_CHECK
             if (!item->peer.active) {
                 item->state = WCOPE;
             }
             break;
         case WCOPE:
-            acp_setEMDutyCycleR(&item->em, GOOD_FLOAT);
+            acp_setEMFloat(&item->em, GOOD_FLOAT);
             INTERVAL_CHECK
             if (item->peer.active) {
                 ton_ts_reset(&item->tmr_cope);
@@ -219,7 +219,7 @@ void progControl(Prog *item) {
             }
             break;
         case WGOOD:
-            acp_setEMDutyCycleR(&item->em, BAD_FLOAT);
+            acp_setEMFloat(&item->em, BAD_FLOAT);
             INTERVAL_CHECK
             if (item->peer.active) {
                 item->g_count++;

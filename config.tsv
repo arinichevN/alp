@@ -1,2 +1,2 @@
 port	cd_sec	cd_nsec	log_row_count	db_data_path	log_db_file
-49175	5	5000000	255	/etc/controller/chp/data.db	/etc/controller/log.db
+49176	5	5000000	255	/etc/controller/chp/data.db	/etc/controller/log.db
